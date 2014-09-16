@@ -1,8 +1,5 @@
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-```
-
-```haskell
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 ```
