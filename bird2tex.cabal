@@ -14,5 +14,5 @@ cabal-version:       >=1.10
 executable bird2tex
   main-is:             bird2tex.lhs
   other-extensions:    OverloadedStrings
-  build-depends:       base, bytestring
+  build-depends:       base, text
   default-language:    Haskell2010
