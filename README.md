@@ -56,6 +56,6 @@ the first space following it.
 ```haskell
 stripBirdTag :: ByteString -> ByteString
 stripBirdTag l
-  | l == ">"   = ""
+  | l == ">"  = ""
   | otherwise = BS.drop 2 l
 ```

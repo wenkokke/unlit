@@ -45,5 +45,5 @@ a the first space following it.
 
 > stripBirdTag :: ByteString -> ByteString
 > stripBirdTag l
->   | l == ">"   = ""
+>   | l == ">" = ""
 >   | otherwise = BS.drop 2 l
