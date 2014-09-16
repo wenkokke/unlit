@@ -1,8 +1,8 @@
-``` {.sourceCode .literate .haskell}
+```haskell
 {-# LANGUAGE OverloadedStrings #-}
 ```
 
-``` {.sourceCode .literate .haskell}
+```haskell
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 ```
@@ -12,7 +12,7 @@ standard input, and emits a literate file in LaTeX-style to the standard
 output. It does this by calling the `bird2tex` function and printing the
 result.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 main :: IO ()
 main = BS.getContents >>=
        sequence_ . map BS.putStrLn . bird2tex False . BS.lines
@@ -22,7 +22,7 @@ The `bird2tex` function is best seen as an automaton with two states:
 either it *is* is a code block, or it *isn't*. To represent this state
 we will use booleans.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 type State = Bool
 ```
 
@@ -33,7 +33,7 @@ changes its state to `False` and emits an `\end{code}` tag. In all other
 cases, the automaton simply copies the line verbatim, stripping bird
 tags where necessary.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 bird2tex :: State -> [ByteString] -> [ByteString]
 bird2tex _ [] = []
 bird2tex False (l:ls) -- outside of code block
@@ -48,7 +48,7 @@ A bird tag is defined as *either* a line containing solely the symbol
 '\>', or a line starting with the symbol '\>' followed by at least one
 space.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 isBirdTag :: ByteString -> Bool
 isBirdTag l = (l == ">") || ("> " `BS.isPrefixOf` l)
 ```
@@ -56,7 +56,7 @@ isBirdTag l = (l == ">") || ("> " `BS.isPrefixOf` l)
 Due to this definition, whenever we strip a bird tag, we also remove a
 the first space following it.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 stripBirdTag :: ByteString -> ByteString
 stripBirdTag l
   | l == ">"   = ""
