@@ -16,14 +16,14 @@ blocks.
 
 Each of these styles is characterised by its own set of delimiters:
 
-> data Delim = BeginCode | EndCode | Bird | LongFence | ShortFence
+> data Delim = BeginCode | EndCode | Bird | TildeFence | BacktickFence
 
 > instance Show Delim where
->   show BeginCode  = "\\begin{code}"
->   show EndCode    = "\\end{code}"
->   show Bird       = ">"
->   show LongFence  = "~~~"
->   show ShortFence = "```"
+>   show BeginCode     = "\\begin{code}"
+>   show EndCode       = "\\end{code}"
+>   show Bird          = ">"
+>   show TildeFence    = "~~~"
+>   show BacktickFence = "```"
 
 In LaTeX-style, a codeblock is delimited by `\begin{code}` and
 `\end{code}` tags.
@@ -54,16 +54,17 @@ a the first space following it.
 >   | otherwise = T.drop 2 l
 
 
-Lastly, Markdown supports two styles of fenced codeblocks: long and
-short.
+Lastly, Markdown supports two styles of fenced codeblocks: using
+tildes or using backticks.
 
-> longFence, shortFence :: Text
-> longFence  = "~~~"
-> shortFence = "```"
+
+> tildeFence, backtickFence :: Text
+> tildeFence    = "~~~"
+> backtickFence = "```"
 >
-> isLongFence, isShortFence :: Text -> Bool
-> isLongFence  l = longFence  `T.isPrefixOf` l
-> isShortFence l = shortFence `T.isPrefixOf` l
+> isTildeFence, isBacktickFence :: Text -> Bool
+> isTildeFence    l = tildeFence    `T.isPrefixOf` l
+> isBacktickFence l = backtickFence `T.isPrefixOf` l
 
 These two fences have support for adding metadata, in the form of a
 CSS-style dictionary (`{#mycode .haskell .numberLines startFrom=100}`)
@@ -75,21 +76,21 @@ line, whether it conforms to *any* of the styles.
 
 > isDelim :: Text -> Maybe Delim
 > isDelim l
->   | isBeginCode  l = Just BeginCode
->   | isEndCode    l = Just EndCode
->   | isBird       l = Just Bird
->   | isLongFence  l = Just LongFence
->   | isShortFence l = Just ShortFence
->   | otherwise      = Nothing
+>   | isBeginCode     l = Just BeginCode
+>   | isEndCode       l = Just EndCode
+>   | isBird          l = Just Bird
+>   | isTildeFence    l = Just TildeFence
+>   | isBacktickFence l = Just BacktickFence
+>   | otherwise         = Nothing
 
 And finally, for the styles that use opening and closing brackets, we
 will need a function that checks if these pairs match.
 
 > match :: Delim -> Delim -> Bool
-> match BeginCode  EndCode    = True
-> match LongFence  LongFence  = True
-> match ShortFence ShortFence = True
-> match _          _          = False
+> match BeginCode     EndCode       = True
+> match TildeFence    TildeFence    = True
+> match BacktickFence BacktickFence = True
+> match _             _             = False
 
 Note that Bird-tags are notably absent from the `match` function, as
 they are a special case.
@@ -120,7 +121,7 @@ also allow fenced code blocks.
 > latex, bird, markdown :: SourceStyle
 > latex    = Style [BeginCode, EndCode]
 > bird     = Style [Bird]
-> markdown = Style [Bird, LongFence, ShortFence]
+> markdown = Style [Bird, TildeFence, BacktickFence]
 
 And it will output *either* the code contained within the codeblocks,
 *or* the literate file set in a different style.
