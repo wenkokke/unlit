@@ -1,9 +1,11 @@
 > {-# LANGUAGE OverloadedStrings #-}
-> module Main where
->
+> import Data.Char (toLower)
+> import Data.Maybe (maybeToList)
 > import Data.Text.Lazy (Text)
 > import qualified Data.Text.Lazy as T
 > import qualified Data.Text.Lazy.IO as T
+> import System.Environment (getArgs)
+> import System.Console.GetOpt
 
 
 
@@ -17,14 +19,14 @@ blocks.
 Each of these styles is characterised by its own set of delimiters:
 
 > data Delim = BeginCode  | EndCode
->            | Bird
+>            | BirdTag
 >            | TildeFence | BacktickFence
 >            deriving (Eq)
 
 > instance Show Delim where
 >   show BeginCode     = "\\begin{code}"
 >   show EndCode       = "\\end{code}"
->   show Bird          = ">"
+>   show BirdTag       = ">"
 >   show TildeFence    = "~~~"
 >   show BacktickFence = "```"
 
@@ -45,14 +47,14 @@ A tagged line is defined as *either* a line containing solely the
 symbol '>', or a line starting with the symbol '>' followed by at
 least one space.
 
-> isBird :: Text -> Bool
-> isBird l = (l == ">") || ("> " `T.isPrefixOf` l)
+> isBirdTag :: Text -> Bool
+> isBirdTag l = (l == ">") || ("> " `T.isPrefixOf` l)
 
 Due to this definition, whenever we strip a bird tag, we also remove
 a the first space following it.
 
-> stripBird :: Text -> Text
-> stripBird l
+> stripBirdTag :: Text -> Text
+> stripBirdTag l
 >   | l == ">" = ""
 >   | otherwise = T.drop 2 l
 
@@ -70,7 +72,7 @@ tildes or using backticks.
 
 These two fences have support for adding metadata, in the form of a
 CSS-style dictionary (`{#mycode .haskell .numberLines startFrom=100}`)
-for long fences or a list of classes for short fences.[^fenced-code-attributes][^fenced-code-indention]
+for long fences or a list of classes for short fences.[^fenced-code-attributes]
 
 
 In general, we will also need a function that checks, for a given
@@ -80,7 +82,7 @@ line, whether it conforms to *any* of the styles.
 > isDelim l
 >   | isBeginCode     l = Just BeginCode
 >   | isEndCode       l = Just EndCode
->   | isBird          l = Just Bird
+>   | isBirdTag       l = Just BirdTag
 >   | isTildeFence    l = Just TildeFence
 >   | isBacktickFence l = Just BacktickFence
 >   | otherwise         = Nothing
@@ -109,39 +111,37 @@ output.
 
 The options for source styles are as follows:
 
-> data SourceStyle
->   = Infer
->   | Style { name :: String, allowed :: [Delim] }
+> data Name  = LaTeX | Bird | Markdown deriving (Show)
+> data Style = Style { name :: Name, allowed :: [Delim] }
 >
-> latex, bird, markdown :: SourceStyle
-> latex    = Style "LaTeX"    [BeginCode, EndCode]
-> bird     = Style "Bird"     [Bird]
-> markdown = Style "Markdown" [Bird, TildeFence, BacktickFence]
+> latex, bird, markdown :: Style
+> latex    = Style LaTeX    [BeginCode, EndCode]
+> bird     = Style Bird     [BirdTag]
+> markdown = Style Markdown [BirdTag, TildeFence, BacktickFence]
 
-Additionally, when the source style is set to `Infer`, the program
+Additionally, when the source style is set to `Nothing`, the program
 will guess the style based on the first delimiter it encounters,
 always guessing the most permissive style---i.e. when it encounters a
 Bird-tag it will assume that it is dealing with a Markdown-style
 literate file and also allow fenced code blocks.
 
-> infer :: Maybe Delim -> SourceStyle -> SourceStyle
-> infer  Nothing         Infer = Infer
-> infer (Just BeginCode) Infer = latex
-> infer (Just _)         Infer = markdown
-> infer  Nothing         ss    = ss
-> infer (Just del)       ss    = check del ss
+> infer :: Maybe Delim -> Maybe Style -> Maybe Style
+> infer  Nothing         Nothing  = Nothing
+> infer (Just BeginCode) Nothing  = Just latex
+> infer (Just _)         Nothing  = Just markdown
+> infer  Nothing        (Just ss) = Just ss
+> infer (Just del)      (Just ss) = Just (check del ss)
 
-> check :: Delim -> SourceStyle -> SourceStyle
+> check :: Delim -> Style -> Style
 > check del ss
 >   | del `elem` allowed ss = ss
->   | otherwise = error ("delimiter " ++ show del ++ " disallowed in " ++ name ss)
+>   | otherwise = error ("delimiter " ++ show del ++ " disallowed in " ++ show (name ss))
 
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-> unlit :: SourceStyle -> [Text] -> [Text]
+> unlit :: Maybe Style -> [Text] -> [Text]
 > unlit ss = unlit' ss Nothing
-
 
 However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
@@ -149,29 +149,148 @@ of code block (if any) the automaton currently is in.
 
 > type State = Maybe Delim
 
-> unlit' :: SourceStyle -> State -> [Text] -> [Text]
+> unlit' :: Maybe Style -> State -> [Text] -> [Text]
 > unlit' _ _ [] = []
 > unlit' ss q (l:ls) = case (q, q') of
 >
->   (Nothing   , Nothing)      -> continue
->   (Nothing   , Just Bird)    -> stripBird l : openBlock
->   (Just Bird , Just Bird)    -> stripBird l : continue
->   (Just Bird , Nothing)      ->               closeBlock
->   (Nothing   , Just EndCode) -> spurious EndCode
->   (Nothing   , Just o)       -> T.empty     : openBlock
->   (Just o    , Nothing)      -> l           : continue
->   (Just o    , Just c)       -> if match o c then T.empty : closeBlock else spurious c
+>   (Nothing      , Nothing)      -> continue
+>   (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
+>   (Just BirdTag , Just BirdTag) -> blockContinue $ stripBirdTag l
+>   (Just BirdTag , Nothing)      -> blockClose
+>   (Nothing      , Just EndCode) -> spurious EndCode
+>   (Nothing      , Just o)       -> blockOpen     $ Nothing
+>   (Just o       , Nothing)      -> blockContinue $ l
+>   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
 >
 >   where
->     q'             = isDelim l
->     continueWith q = unlit' (infer q' ss) q ls
->     openBlock      = continueWith q'
->     continue       = continueWith q
->     closeBlock     = continueWith Nothing
->     spurious q     = error ("spurious " ++ show q)
+>     q'              = isDelim l
+>     continueWith  q = unlit' (infer q' ss) q ls
+>     continue        = continueWith q
+>     blockOpen     l = maybeToList l ++ continueWith q'
+>     blockContinue l = l : continue
+>     blockClose      = T.empty : continueWith Nothing
+>     spurious      q = error ("spurious " ++ show q)
 
-[^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
-[^fenced-code-indention]: At the moment we don't support fenced code block indentation.
+
+
+What do we want `relit` to do?
+==============================
+
+Sadly, no, `relit` won't be able to take source code and
+automatically convert it to literate code. I'm not quite up to the
+challenge of automatically generating meaningful documentation from
+arbitrary code... I wish I was.
+
+What `relit` will do is read a literate file using one style of
+delimiters and emit the same file using an other style of delimiters.
+
+> relit :: Maybe Style -> Name -> [Text] -> [Text]
+> relit ss ts = relit' ss ts Nothing
+
+Again, we will interpret the helper function `relit'` as an
+automaton, which remembers the current state. However, we now also
+need a function which can emit code blocks in a certain style. For
+this purpose we will define a triple of functions.
+
+> emitBirdTag :: Text -> Text
+> emitBirdTag l = "> " `T.append` l
+>
+> emitOpen  :: Name -> Maybe Text -> [Text]
+> emitOpen  LaTeX    l = beginCode : maybeToList l
+> emitOpen  Bird     l = T.empty : map emitBirdTag (maybeToList l)
+> emitOpen  Markdown l = backtickFence : maybeToList l
+>
+> emitCode  :: Name -> Text -> Text
+> emitCode  Bird     l = emitBirdTag l
+> emitCode  _        l = l
+>
+> emitClose :: Name -> Text
+> emitClose LaTeX      = endCode
+> emitClose Bird       = T.empty
+> emitClose Markdown   = backtickFence
+
+Using these simple functions we can easily define the `relit'`
+function.
+
+> relit' :: Maybe Style -> Name -> State -> [Text] -> [Text]
+> relit' _ _ _ [] = []
+> relit' ss ts q (l:ls) = case (q, q') of
+>
+>   (Nothing      , Nothing)      -> l : continue
+>   (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
+>   (Just BirdTag , Just BirdTag) -> blockContinue $ stripBirdTag l
+>   (Just BirdTag , Nothing)      -> blockClose
+>   (Nothing      , Just EndCode) -> spurious EndCode
+>   (Nothing      , Just o)       -> blockOpen     $ Nothing
+>   (Just o       , Nothing)      -> blockContinue $ l
+>   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
+>
+>   where
+>     q'              = isDelim l
+>     continueWith  q = relit' (infer q' ss) ts q ls
+>     continue        = continueWith q
+>     blockOpen     l = emitOpen  ts l ++ continueWith q'
+>     blockContinue l = emitCode  ts l : continue
+>     blockClose      = emitClose ts   : continueWith Nothing
+>     spurious      q = error ("spurious " ++ show q)
+
+
+
+Implementing the `main` function
+================================
+
+All that remains now is to implement the `main` function. This is
+grossly uninteresting, so go look elsewhere.
+
+> parseStyle :: String -> Maybe Name
+> parseStyle arg = case map toLower arg of
+>   "latex"    -> Just LaTeX
+>   "bird"     -> Just Bird
+>   "markdown" -> Just Markdown
+>   _          -> Nothing
+
+> fromName :: Name -> Style
+> fromName LaTeX    = latex
+> fromName Bird     = bird
+> fromName Markdown = markdown
+
+> data Options = Options
+>   { optSourceStyle :: Maybe Style
+>   , optTargetStyle :: Maybe Name
+>   }
+
+> defaultOptions :: Options
+> defaultOptions = Options Nothing Nothing
+
+> options :: [ OptDescr (Options -> IO Options) ]
+> options =
+>   [ Option "s" ["source"]
+>     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap fromName (parseStyle arg) })
+>             "STYLE_NAME")
+>     "Source style (latex, bird, markdown)"
+>   , Option "t" ["target"]
+>     (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle arg })
+>             "STYLE_NAME")
+>     "Target style (latex, bird, markdown)"
+>   ]
 
 > main :: IO ()
-> main = T.getContents >>= sequence_ . map T.putStrLn . unlit Infer . T.lines
+> main = do
+>   args <- getArgs
+>
+>   -- parse options
+>   let (actions, nonOptions, errors) = getOpt RequireOrder options args
+>   opts <- foldl (>>=) (return defaultOptions) actions
+>   let Options { optSourceStyle = ss
+>               , optTargetStyle = ts } = opts
+>
+>   -- define unlit/relit
+>   let run = case ts of
+>              Nothing -> unlit ss
+>              Just ts -> relit ss ts
+>
+>   -- run
+>   T.getContents >>= sequence_ . fmap T.putStrLn . run . T.lines
+
+
+[^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
