@@ -140,7 +140,7 @@ literate file and also allow fenced code blocks.
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-> unlit :: Maybe Style -> [Text] -> [Text]
+> unlit :: Maybe Style -> [(Int, Text)] -> [Text]
 > unlit ss = unlit' ss Nothing
 
 However, the helper function `unlit'` is best thought of as a finite
@@ -149,9 +149,9 @@ of code block (if any) the automaton currently is in.
 
 > type State = Maybe Delim
 
-> unlit' :: Maybe Style -> State -> [Text] -> [Text]
+> unlit' :: Maybe Style -> State -> [(Int, Text)] -> [Text]
 > unlit' _ _ [] = []
-> unlit' ss q (l:ls) = case (q, q') of
+> unlit' ss q ((n, l):ls) = case (q, q') of
 >
 >   (Nothing      , Nothing)      -> continue
 >   (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
@@ -169,7 +169,7 @@ of code block (if any) the automaton currently is in.
 >     blockOpen     l = maybeToList l ++ continueWith q'
 >     blockContinue l = l : continue
 >     blockClose      = T.empty : continueWith Nothing
->     spurious      q = error ("spurious " ++ show q)
+>     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
 
 
 
@@ -184,7 +184,7 @@ arbitrary code... I wish I was.
 What `relit` will do is read a literate file using one style of
 delimiters and emit the same file using an other style of delimiters.
 
-> relit :: Maybe Style -> Name -> [Text] -> [Text]
+> relit :: Maybe Style -> Name -> [(Int, Text)] -> [Text]
 > relit ss ts = relit' ss ts Nothing
 
 Again, we will interpret the helper function `relit'` as an
@@ -212,9 +212,9 @@ this purpose we will define a triple of functions.
 Using these simple functions we can easily define the `relit'`
 function.
 
-> relit' :: Maybe Style -> Name -> State -> [Text] -> [Text]
+> relit' :: Maybe Style -> Name -> State -> [(Int, Text)] -> [Text]
 > relit' _ _ _ [] = []
-> relit' ss ts q (l:ls) = case (q, q') of
+> relit' ss ts q ((n, l):ls) = case (q, q') of
 >
 >   (Nothing      , Nothing)      -> l : continue
 >   (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
@@ -232,7 +232,7 @@ function.
 >     blockOpen     l = emitOpen  ts l ++ continueWith q'
 >     blockContinue l = emitCode  ts l : continue
 >     blockClose      = emitClose ts   : continueWith Nothing
->     spurious      q = error ("spurious " ++ show q)
+>     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
 
 
 
@@ -242,16 +242,16 @@ Implementing the `main` function
 All that remains now is to implement the `main` function. This is
 grossly uninteresting, so go look elsewhere.
 
-> styleName :: String -> Maybe Name
-> styleName arg = case map toLower arg of
+> str2name :: String -> Maybe Name
+> str2name arg = case map toLower arg of
 >   "latex"    -> Just LaTeX
 >   "bird"     -> Just Bird
 >   "markdown" -> Just Markdown
 >   _          -> error ("non-existent style " ++ arg)
 >
-> toStyle LaTeX    = latex
-> toStyle Bird     = bird
-> toStyle Markdown = markdown
+> name2style LaTeX    = latex
+> name2style Bird     = bird
+> name2style Markdown = markdown
 >
 > data Options = Options
 >   { optSourceStyle :: Maybe Style
@@ -264,11 +264,11 @@ grossly uninteresting, so go look elsewhere.
 > options :: [ OptDescr (Options -> IO Options) ]
 > options =
 >   [ Option "s" ["source"]
->     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap toStyle (styleName arg) })
+>     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap name2style (str2name arg) })
 >             "STYLE_NAME")
 >     "Source style (latex, bird, markdown)"
 >   , Option "t" ["target"]
->     (ReqArg (\arg opt -> return opt { optTargetStyle = styleName arg })
+>     (ReqArg (\arg opt -> return opt { optTargetStyle = str2name arg })
 >             "STYLE_NAME")
 >     "Target style (latex, bird, markdown)"
 >   ]
@@ -288,8 +288,8 @@ grossly uninteresting, so go look elsewhere.
 >              Nothing -> unlit ss
 >              Just ts -> relit ss ts
 >
->   -- run
->   T.getContents >>= sequence_ . fmap T.putStrLn . run . T.lines
+>   -- run unlit/relit
+>   T.getContents >>= sequence_ . fmap T.putStrLn . run . zip [1..] . T.lines
 
 
 [^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
