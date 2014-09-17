@@ -259,10 +259,17 @@ grossly uninteresting, so go look elsewhere.
 > data Options = Options
 >   { optSourceStyle :: Maybe Style
 >   , optTargetStyle :: Maybe Name
+>   , optInputFile   :: IO Text
+>   , optOutputFile  :: Text -> IO ()
 >   }
 >
 > defaultOptions :: Options
-> defaultOptions = Options Nothing Nothing
+> defaultOptions = Options
+>   { optSourceStyle = Nothing
+>   , optTargetStyle = Nothing
+>   , optInputFile   = T.getContents
+>   , optOutputFile  = T.putStrLn
+>   }
 >
 > options :: [ OptDescr (Options -> IO Options) ]
 > options =
@@ -274,6 +281,14 @@ grossly uninteresting, so go look elsewhere.
 >     (ReqArg (\arg opt -> return opt { optTargetStyle = str2name arg })
 >             "STYLE_NAME")
 >     "Target style (latex, bird, markdown)"
+>   , Option "i" ["input"]
+>     (ReqArg (\arg opt -> return opt { optInputFile = T.readFile arg })
+>             "FILE")
+>     "Input file (optional)"
+>   , Option "o" ["output"]
+>     (ReqArg (\arg opt -> return opt { optOutputFile = T.writeFile arg })
+>             "FILE")
+>     "Output file (optional)"
 >   , Option "h" ["help"]
 >     (NoArg  (\_ -> do
 >     	        prg <- getProgName
@@ -290,13 +305,15 @@ grossly uninteresting, so go look elsewhere.
 >   let (actions, nonOptions, errors) = getOpt Permute options args
 >   opts <- foldl (>>=) (return defaultOptions) actions
 >   let Options { optSourceStyle = ss
->               , optTargetStyle = ts } = opts
+>               , optTargetStyle = ts
+>               , optInputFile   = input
+>               , optOutputFile  = output } = opts
 >
 >   -- define unlit/relit
 >   let run = maybe (unlit ss) (relit ss) ts
 >
 >   -- run unlit/relit
->   T.getContents >>= sequence_ . fmap T.putStrLn . run . zip [1..] . T.lines
+>   input >>= output . T.unlines . run . zip [1..] . T.lines
 
 
 [^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
