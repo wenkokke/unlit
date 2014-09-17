@@ -248,20 +248,20 @@ grossly uninteresting, so go look elsewhere.
 >   "bird"     -> Just Bird
 >   "markdown" -> Just Markdown
 >   _          -> Nothing
-
+>
 > fromName :: Name -> Style
 > fromName LaTeX    = latex
 > fromName Bird     = bird
 > fromName Markdown = markdown
-
+>
 > data Options = Options
 >   { optSourceStyle :: Maybe Style
 >   , optTargetStyle :: Maybe Name
 >   }
-
+>
 > defaultOptions :: Options
 > defaultOptions = Options Nothing Nothing
-
+>
 > options :: [ OptDescr (Options -> IO Options) ]
 > options =
 >   [ Option "s" ["source"]
@@ -273,7 +273,7 @@ grossly uninteresting, so go look elsewhere.
 >             "STYLE_NAME")
 >     "Target style (latex, bird, markdown)"
 >   ]
-
+>
 > main :: IO ()
 > main = do
 >   args <- getArgs
