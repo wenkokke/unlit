@@ -16,7 +16,10 @@ blocks.
 
 Each of these styles is characterised by its own set of delimiters:
 
-> data Delim = BeginCode | EndCode | Bird | TildeFence | BacktickFence
+> data Delim = BeginCode  | EndCode
+>            | Bird
+>            | TildeFence | BacktickFence
+>            deriving (Eq)
 
 > instance Show Delim where
 >   show BeginCode     = "\\begin{code}"
@@ -57,7 +60,6 @@ a the first space following it.
 Lastly, Markdown supports two styles of fenced codeblocks: using
 tildes or using backticks.
 
-
 > tildeFence, backtickFence :: Text
 > tildeFence    = "~~~"
 > backtickFence = "```"
@@ -83,8 +85,8 @@ line, whether it conforms to *any* of the styles.
 >   | isBacktickFence l = Just BacktickFence
 >   | otherwise         = Nothing
 
-And finally, for the styles that use opening and closing brackets, we
-will need a function that checks if these pairs match.
+And, for the styles which use opening and closing brackets, we will
+need a function that checks if these pairs match.
 
 > match :: Delim -> Delim -> Bool
 > match BeginCode     EndCode       = True
@@ -101,66 +103,75 @@ What do we want `unlit` to do?
 ==============================
 
 The `unlit` program that we will implement below will do the following:
-it will read a literate program from the standard input, allowing one
-or more styles of code block.
+it will read a literate program from the standard input---allowing one
+or more styles of code block---and emit only the code to the standard
+output.
 
-> data SourceStyle = Infer | Style [Delim]
+The options for source styles are as follows:
 
-When the source style is set to `Infer`, the program will guess the
-style based on the first delimiter it encounters, always guessing the
-most permissive style---i.e. when it encounters a Bird-tag it will
-assume that it is dealing with a Markdown-style literate file and
-also allow fenced code blocks.
+> data SourceStyle
+>   = Infer
+>   | Style { name :: String, allowed :: [Delim] }
+>
+> latex, bird, markdown :: SourceStyle
+> latex    = Style "LaTeX"    [BeginCode, EndCode]
+> bird     = Style "Bird"     [Bird]
+> markdown = Style "Markdown" [Bird, TildeFence, BacktickFence]
+
+Additionally, when the source style is set to `Infer`, the program
+will guess the style based on the first delimiter it encounters,
+always guessing the most permissive style---i.e. when it encounters a
+Bird-tag it will assume that it is dealing with a Markdown-style
+literate file and also allow fenced code blocks.
 
 > infer :: Maybe Delim -> SourceStyle -> SourceStyle
 > infer  Nothing         Infer = Infer
 > infer (Just BeginCode) Infer = latex
 > infer (Just _)         Infer = markdown
-> infer  _               ss    = ss
+> infer  Nothing         ss    = ss
+> infer (Just del)       ss    = check del ss
 
-> latex, bird, markdown :: SourceStyle
-> latex    = Style [BeginCode, EndCode]
-> bird     = Style [Bird]
-> markdown = Style [Bird, TildeFence, BacktickFence]
+> check :: Delim -> SourceStyle -> SourceStyle
+> check del ss
+>   | del `elem` allowed ss = ss
+>   | otherwise = error ("delimiter " ++ show del ++ " disallowed in " ++ name ss)
 
-And it will output *either* the code contained within the codeblocks,
-*or* the literate file set in a different style.
+Thus, the `unlit` function will have two parameters: its source style
+and the text to convert.
 
-> data TargetStyle = Code | Literate Delim
+> unlit :: SourceStyle -> [Text] -> [Text]
+> unlit ss = unlit' ss Nothing
 
-Therefore, the `unlit` function will have three parameters: its
-source style, its target style and the text to convert.
 
-> unlit :: SourceStyle -> TargetStyle -> [Text] -> [Text]
-> unlit ss ts = unlit' ss ts Nothing
-
-The internal function, however, needs another parameter: it needs to
-remember whether or not it currently is in a code block.
+However, the helper function `unlit'` is best thought of as a finite
+state automaton, where the states are used to remember the what kind
+of code block (if any) the automaton currently is in.
 
 > type State = Maybe Delim
 
-> unlit' :: SourceStyle -> TargetStyle -> State -> [Text] -> [Text]
-> unlit' _ _ _ [] = []
-> unlit' ss ts@Code q (l:ls) = case (q, q') of
+> unlit' :: SourceStyle -> State -> [Text] -> [Text]
+> unlit' _ _ [] = []
+> unlit' ss q (l:ls) = case (q, q') of
+>
 >   (Nothing   , Nothing)      -> continue
 >   (Nothing   , Just Bird)    -> stripBird l : openBlock
 >   (Just Bird , Just Bird)    -> stripBird l : continue
 >   (Just Bird , Nothing)      ->               closeBlock
->   (Nothing   , Just EndCode) -> error ("spurious " ++ show EndCode)
+>   (Nothing   , Just EndCode) -> spurious EndCode
 >   (Nothing   , Just o)       -> T.empty     : openBlock
 >   (Just o    , Nothing)      -> l           : continue
->   (Just o    , Just c)       -> if match o c
->                                 then T.empty : closeBlock
->                                 else error ("spurious " ++ show c)
+>   (Just o    , Just c)       -> if match o c then T.empty : closeBlock else spurious c
+>
 >   where
 >     q'             = isDelim l
->     continueWith q = unlit' (infer q' ss) ts q ls
+>     continueWith q = unlit' (infer q' ss) q ls
 >     openBlock      = continueWith q'
 >     continue       = continueWith q
 >     closeBlock     = continueWith Nothing
+>     spurious q     = error ("spurious " ++ show q)
 
 [^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
 [^fenced-code-indention]: At the moment we don't support fenced code block indentation.
 
 > main :: IO ()
-> main = T.getContents >>= sequence_ . map T.putStrLn . unlit Infer Code . T.lines
+> main = T.getContents >>= sequence_ . map T.putStrLn . unlit Infer . T.lines
