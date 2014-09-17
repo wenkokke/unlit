@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/pepijnkokke/unlit.png?branch=master)](https://travis-ci.org/pepijnkokke/unlit)
+
 ``` haskell
 {-# LANGUAGE OverloadedStrings #-}
 import Data.Char (toLower)
