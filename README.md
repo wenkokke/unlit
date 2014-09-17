@@ -1,12 +1,14 @@
 ``` haskell
 {-# LANGUAGE OverloadedStrings #-}
 import Data.Char (toLower)
-import Data.Maybe (maybeToList)
+import Data.Maybe (maybe,maybeToList)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
-import System.Environment (getArgs)
-import System.Console.GetOpt
+import System.Environment (getArgs,getProgName)
+import System.Exit (exitWith,ExitCode(..))
+import System.IO (hPutStrLn,stderr)
+import System.Console.GetOpt (OptDescr(..),ArgDescr(..),ArgOrder(..),usageInfo,getOpt)
 ```
 
 What are literate programs?
@@ -270,6 +272,7 @@ str2name arg = case map toLower arg of
   "latex"    -> Just LaTeX
   "bird"     -> Just Bird
   "markdown" -> Just Markdown
+  "code"     -> Nothing
   _          -> error ("non-existent style " ++ arg)
 
 name2style LaTeX    = latex
@@ -294,6 +297,12 @@ options =
     (ReqArg (\arg opt -> return opt { optTargetStyle = str2name arg })
             "STYLE_NAME")
     "Target style (latex, bird, markdown)"
+  , Option "h" ["help"]
+    (NoArg  (\_ -> do
+              prg <- getProgName
+              hPutStrLn stderr (usageInfo prg options)
+              exitWith ExitSuccess))
+    "Show help"
   ]
 
 main :: IO ()
@@ -301,15 +310,13 @@ main = do
   args <- getArgs
 
   -- parse options
-  let (actions, nonOptions, errors) = getOpt RequireOrder options args
+  let (actions, nonOptions, errors) = getOpt Permute options args
   opts <- foldl (>>=) (return defaultOptions) actions
   let Options { optSourceStyle = ss
               , optTargetStyle = ts } = opts
 
   -- define unlit/relit
-  let run = case ts of
-             Nothing -> unlit ss
-             Just ts -> relit ss ts
+  let run = maybe (unlit ss) (relit ss) ts
 
   -- run unlit/relit
   T.getContents >>= sequence_ . fmap T.putStrLn . run . zip [1..] . T.lines
