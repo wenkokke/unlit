@@ -1,10 +1,12 @@
 ``` haskell
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
-
+import Data.Char (toLower)
+import Data.Maybe (maybeToList)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
+import System.Environment (getArgs)
+import System.Console.GetOpt
 ```
 
 What are literate programs?
@@ -16,14 +18,17 @@ are: LaTeX-style code tags, Bird tags and Markdown fenced code blocks.
 Each of these styles is characterised by its own set of delimiters:
 
 ``` haskell
-data Delim = BeginCode | EndCode | Bird | TildeFence | BacktickFence
+data Delim = BeginCode  | EndCode
+           | BirdTag
+           | TildeFence | BacktickFence
+           deriving (Eq)
 ```
 
 ``` haskell
 instance Show Delim where
   show BeginCode     = "\\begin{code}"
   show EndCode       = "\\end{code}"
-  show Bird          = ">"
+  show BirdTag       = ">"
   show TildeFence    = "~~~"
   show BacktickFence = "```"
 ```
@@ -43,20 +48,20 @@ isEndCode   l = endCode   `T.isPrefixOf` l
 
 In Bird-style, every line in a codeblock must start with a Bird tag. A
 tagged line is defined as *either* a line containing solely the symbol
-'\>', or a line starting with the symbol '\>' followed by at least one
+‘\>’, or a line starting with the symbol ‘\>’ followed by at least one
 space.
 
 ``` haskell
-isBird :: Text -> Bool
-isBird l = (l == ">") || ("> " `T.isPrefixOf` l)
+isBirdTag :: Text -> Bool
+isBirdTag l = (l == ">") || ("> " `T.isPrefixOf` l)
 ```
 
 Due to this definition, whenever we strip a bird tag, we also remove a
 the first space following it.
 
 ``` haskell
-stripBird :: Text -> Text
-stripBird l
+stripBirdTag :: Text -> Text
+stripBirdTag l
   | l == ">" = ""
   | otherwise = T.drop 2 l
 ```
@@ -76,7 +81,7 @@ isBacktickFence l = backtickFence `T.isPrefixOf` l
 
 These two fences have support for adding metadata, in the form of a
 CSS-style dictionary (`{#mycode .haskell .numberLines startFrom=100}`)
-for long fences or a list of classes for short fences.[^1][^2]
+for long fences or a list of classes for short fences.[^1]
 
 In general, we will also need a function that checks, for a given line,
 whether it conforms to *any* of the styles.
@@ -86,14 +91,14 @@ isDelim :: Text -> Maybe Delim
 isDelim l
   | isBeginCode     l = Just BeginCode
   | isEndCode       l = Just EndCode
-  | isBird          l = Just Bird
+  | isBirdTag       l = Just BirdTag
   | isTildeFence    l = Just TildeFence
   | isBacktickFence l = Just BacktickFence
   | otherwise         = Nothing
 ```
 
-And finally, for the styles that use opening and closing brackets, we
-will need a function that checks if these pairs match.
+And, for the styles which use opening and closing brackets, we will need
+a function that checks if these pairs match.
 
 ``` haskell
 match :: Delim -> Delim -> Bool
@@ -110,83 +115,215 @@ What do we want `unlit` to do?
 ==============================
 
 The `unlit` program that we will implement below will do the following:
-it will read a literate program from the standard input, allowing one or
-more styles of code block.
+it will read a literate program from the standard input—allowing one or
+more styles of code block—and emit only the code to the standard output.
+
+The options for source styles are as follows:
 
 ``` haskell
-data SourceStyle = Infer | Style [Delim]
+data Name  = LaTeX | Bird | Markdown deriving (Show)
+data Style = Style { name :: Name, allowed :: [Delim] }
+
+latex, bird, markdown :: Style
+latex    = Style LaTeX    [BeginCode, EndCode]
+bird     = Style Bird     [BirdTag]
+markdown = Style Markdown [BirdTag, TildeFence, BacktickFence]
 ```
 
-When the source style is set to `Infer`, the program will guess the
-style based on the first delimiter it encounters, always guessing the
-most permissive style---i.e. when it encounters a Bird-tag it will
-assume that it is dealing with a Markdown-style literate file and also
-allow fenced code blocks.
+Additionally, when the source style is set to `Nothing`, the program
+will guess the style based on the first delimiter it encounters, always
+guessing the most permissive style—i.e. when it encounters a Bird-tag it
+will assume that it is dealing with a Markdown-style literate file and
+also allow fenced code blocks.
 
 ``` haskell
-infer :: Maybe Delim -> SourceStyle -> SourceStyle
-infer  Nothing         Infer = Infer
-infer (Just BeginCode) Infer = latex
-infer (Just _)         Infer = markdown
-infer  _               ss    = ss
+infer :: Maybe Delim -> Maybe Style -> Maybe Style
+infer  Nothing         Nothing  = Nothing
+infer (Just BeginCode) Nothing  = Just latex
+infer (Just _)         Nothing  = Just markdown
+infer  Nothing        (Just ss) = Just ss
+infer (Just del)      (Just ss) = Just (check del ss)
 ```
 
 ``` haskell
-latex, bird, markdown :: SourceStyle
-latex    = Style [BeginCode, EndCode]
-bird     = Style [Bird]
-markdown = Style [Bird, TildeFence, BacktickFence]
+check :: Delim -> Style -> Style
+check del ss
+  | del `elem` allowed ss = ss
+  | otherwise = error ("delimiter " ++ show del ++ " disallowed in " ++ show (name ss))
 ```
 
-And it will output *either* the code contained within the codeblocks,
-*or* the literate file set in a different style.
+Thus, the `unlit` function will have two parameters: its source style
+and the text to convert.
 
 ``` haskell
-data TargetStyle = Code | Literate Delim
+unlit :: Maybe Style -> [Text] -> [Text]
+unlit ss = unlit' ss Nothing
 ```
 
-Therefore, the `unlit` function will have three parameters: its source
-style, its target style and the text to convert.
-
-``` haskell
-unlit :: SourceStyle -> TargetStyle -> [Text] -> [Text]
-unlit ss ts = unlit' ss ts Nothing
-```
-
-The internal function, however, needs another parameter: it needs to
-remember whether or not it currently is in a code block.
+However, the helper function `unlit'` is best thought of as a finite
+state automaton, where the states are used to remember the what kind of
+code block (if any) the automaton currently is in.
 
 ``` haskell
 type State = Maybe Delim
 ```
 
 ``` haskell
-unlit' :: SourceStyle -> TargetStyle -> State -> [Text] -> [Text]
-unlit' _ _ _ [] = []
-unlit' ss ts@Code q (l:ls) = case (q, q') of
-  (Nothing   , Nothing)      -> continue
-  (Nothing   , Just Bird)    -> stripBird l : openBlock
-  (Just Bird , Just Bird)    -> stripBird l : continue
-  (Just Bird , Nothing)      ->               closeBlock
-  (Nothing   , Just EndCode) -> error ("spurious " ++ show EndCode)
-  (Nothing   , Just o)       -> T.empty     : openBlock
-  (Just o    , Nothing)      -> l           : continue
-  (Just o    , Just c)       -> if match o c
-                                then T.empty : closeBlock
-                                else error ("spurious " ++ show c)
+unlit' :: Maybe Style -> State -> [Text] -> [Text]
+unlit' _ _ [] = []
+unlit' ss q (l:ls) = case (q, q') of
+
+  (Nothing      , Nothing)      -> continue
+  (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
+  (Just BirdTag , Just BirdTag) -> blockContinue $ stripBirdTag l
+  (Just BirdTag , Nothing)      -> blockClose
+  (Nothing      , Just EndCode) -> spurious EndCode
+  (Nothing      , Just o)       -> blockOpen     $ Nothing
+  (Just o       , Nothing)      -> blockContinue $ l
+  (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
+
   where
-    q'             = isDelim l
-    continueWith q = unlit' (infer q' ss) ts q ls
-    openBlock      = continueWith q'
-    continue       = continueWith q
-    closeBlock     = continueWith Nothing
+    q'              = isDelim l
+    continueWith  q = unlit' (infer q' ss) q ls
+    continue        = continueWith q
+    blockOpen     l = maybeToList l ++ continueWith q'
+    blockContinue l = l : continue
+    blockClose      = T.empty : continueWith Nothing
+    spurious      q = error ("spurious " ++ show q)
+```
+
+What do we want `relit` to do?
+==============================
+
+Sadly, no, `relit` won’t be able to take source code and automatically
+convert it to literate code. I’m not quite up to the challenge of
+automatically generating meaningful documentation from arbitrary code… I
+wish I was.
+
+What `relit` will do is read a literate file using one style of
+delimiters and emit the same file using an other style of delimiters.
+
+``` haskell
+relit :: Maybe Style -> Name -> [Text] -> [Text]
+relit ss ts = relit' ss ts Nothing
+```
+
+Again, we will interpret the helper function `relit'` as an automaton,
+which remembers the current state. However, we now also need a function
+which can emit code blocks in a certain style. For this purpose we will
+define a triple of functions.
+
+``` haskell
+emitBirdTag :: Text -> Text
+emitBirdTag l = "> " `T.append` l
+
+emitOpen  :: Name -> Maybe Text -> [Text]
+emitOpen  LaTeX    l = beginCode : maybeToList l
+emitOpen  Bird     l = T.empty : map emitBirdTag (maybeToList l)
+emitOpen  Markdown l = backtickFence : maybeToList l
+
+emitCode  :: Name -> Text -> Text
+emitCode  Bird     l = emitBirdTag l
+emitCode  _        l = l
+
+emitClose :: Name -> Text
+emitClose LaTeX      = endCode
+emitClose Bird       = T.empty
+emitClose Markdown   = backtickFence
+```
+
+Using these simple functions we can easily define the `relit'` function.
+
+``` haskell
+relit' :: Maybe Style -> Name -> State -> [Text] -> [Text]
+relit' _ _ _ [] = []
+relit' ss ts q (l:ls) = case (q, q') of
+
+  (Nothing      , Nothing)      -> l : continue
+  (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
+  (Just BirdTag , Just BirdTag) -> blockContinue $ stripBirdTag l
+  (Just BirdTag , Nothing)      -> blockClose
+  (Nothing      , Just EndCode) -> spurious EndCode
+  (Nothing      , Just o)       -> blockOpen     $ Nothing
+  (Just o       , Nothing)      -> blockContinue $ l
+  (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
+
+  where
+    q'              = isDelim l
+    continueWith  q = relit' (infer q' ss) ts q ls
+    continue        = continueWith q
+    blockOpen     l = emitOpen  ts l ++ continueWith q'
+    blockContinue l = emitCode  ts l : continue
+    blockClose      = emitClose ts   : continueWith Nothing
+    spurious      q = error ("spurious " ++ show q)
+```
+
+Implementing the `main` function
+================================
+
+All that remains now is to implement the `main` function. This is
+grossly uninteresting, so go look elsewhere.
+
+``` haskell
+parseStyle :: String -> Maybe Name
+parseStyle arg = case map toLower arg of
+  "latex"    -> Just LaTeX
+  "bird"     -> Just Bird
+  "markdown" -> Just Markdown
+  _          -> Nothing
+```
+
+``` haskell
+fromName :: Name -> Style
+fromName LaTeX    = latex
+fromName Bird     = bird
+fromName Markdown = markdown
+```
+
+``` haskell
+data Options = Options
+  { optSourceStyle :: Maybe Style
+  , optTargetStyle :: Maybe Name
+  }
+```
+
+``` haskell
+defaultOptions :: Options
+defaultOptions = Options Nothing Nothing
+```
+
+``` haskell
+options :: [ OptDescr (Options -> IO Options) ]
+options =
+  [ Option "s" ["source"]
+    (ReqArg (\arg opt -> return opt { optSourceStyle = fmap fromName (parseStyle arg) })
+            "STYLE_NAME")
+    "Source style (latex, bird, markdown)"
+  , Option "t" ["target"]
+    (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle arg })
+            "STYLE_NAME")
+    "Target style (latex, bird, markdown)"
+  ]
 ```
 
 ``` haskell
 main :: IO ()
-main = T.getContents >>= sequence_ . map T.putStrLn . unlit Infer Code . T.lines
+main = do
+  args <- getArgs
+
+  -- parse options
+  let (actions, nonOptions, errors) = getOpt RequireOrder options args
+  opts <- foldl (>>=) (return defaultOptions) actions
+  let Options { optSourceStyle = ss
+              , optTargetStyle = ts } = opts
+
+  -- define unlit/relit
+  let run = case ts of
+             Nothing -> unlit ss
+             Just ts -> relit ss ts
+
+  -- run
+  T.getContents >>= sequence_ . fmap T.putStrLn . run . T.lines
 ```
 
 [^1]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html\#extension-fenced\_code\_attributes
-
-[^2]: At the moment we don't support fenced code block indentation.
