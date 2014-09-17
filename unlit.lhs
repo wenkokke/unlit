@@ -242,17 +242,16 @@ Implementing the `main` function
 All that remains now is to implement the `main` function. This is
 grossly uninteresting, so go look elsewhere.
 
-> parseStyle :: String -> Maybe Name
-> parseStyle arg = case map toLower arg of
+> styleName :: String -> Maybe Name
+> styleName arg = case map toLower arg of
 >   "latex"    -> Just LaTeX
 >   "bird"     -> Just Bird
 >   "markdown" -> Just Markdown
->   _          -> Nothing
+>   _          -> error ("non-existent style " ++ arg)
 >
-> fromName :: Name -> Style
-> fromName LaTeX    = latex
-> fromName Bird     = bird
-> fromName Markdown = markdown
+> toStyle LaTeX    = latex
+> toStyle Bird     = bird
+> toStyle Markdown = markdown
 >
 > data Options = Options
 >   { optSourceStyle :: Maybe Style
@@ -265,11 +264,11 @@ grossly uninteresting, so go look elsewhere.
 > options :: [ OptDescr (Options -> IO Options) ]
 > options =
 >   [ Option "s" ["source"]
->     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap fromName (parseStyle arg) })
+>     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap toStyle (styleName arg) })
 >             "STYLE_NAME")
 >     "Source style (latex, bird, markdown)"
 >   , Option "t" ["target"]
->     (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle arg })
+>     (ReqArg (\arg opt -> return opt { optTargetStyle = styleName arg })
 >             "STYLE_NAME")
 >     "Target style (latex, bird, markdown)"
 >   ]
