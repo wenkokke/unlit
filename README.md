@@ -271,28 +271,20 @@ parseStyle arg = case map toLower arg of
   "bird"     -> Just Bird
   "markdown" -> Just Markdown
   _          -> Nothing
-```
 
-``` haskell
 fromName :: Name -> Style
 fromName LaTeX    = latex
 fromName Bird     = bird
 fromName Markdown = markdown
-```
 
-``` haskell
 data Options = Options
   { optSourceStyle :: Maybe Style
   , optTargetStyle :: Maybe Name
   }
-```
 
-``` haskell
 defaultOptions :: Options
 defaultOptions = Options Nothing Nothing
-```
 
-``` haskell
 options :: [ OptDescr (Options -> IO Options) ]
 options =
   [ Option "s" ["source"]
@@ -304,9 +296,7 @@ options =
             "STYLE_NAME")
     "Target style (latex, bird, markdown)"
   ]
-```
 
-``` haskell
 main :: IO ()
 main = do
   args <- getArgs
