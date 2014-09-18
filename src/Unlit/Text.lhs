@@ -4,6 +4,7 @@
 > import Prelude hiding (all)
 > import Control.Applicative ((<|>))
 > import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
+> import Data.Monoid (mempty,(<>))
 > import Data.Text.Lazy (Text)
 > import qualified Data.Text.Lazy as T
 > import qualified Data.Text.Lazy.IO as T
@@ -145,8 +146,8 @@ literate file and also allow fenced code blocks.
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-> unlit :: Maybe Style -> [(Int, Text)] -> [Text]
-> unlit ss = unlit' ss Nothing
+> unlit :: Maybe Style -> Text -> Text
+> unlit ss = T.unlines . unlit' ss Nothing . zip [1..] . T.lines
 
 However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
@@ -173,7 +174,7 @@ of code block (if any) the automaton currently is in.
 >     continue        = continueWith q
 >     blockOpen     l = maybeToList l ++ continueWith q'
 >     blockContinue l = l : continue
->     blockClose      = T.empty : continueWith Nothing
+>     blockClose      = mempty : continueWith Nothing
 >     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
 
 
@@ -189,8 +190,8 @@ arbitrary code... I wish I was.
 What `relit` will do is read a literate file using one style of
 delimiters and emit the same file using an other style of delimiters.
 
-> relit :: Maybe Style -> Name -> [(Int, Text)] -> [Text]
-> relit ss ts = relit' ss ts Nothing
+> relit :: Maybe Style -> Name -> Text -> Text
+> relit ss ts = T.unlines . relit' ss ts Nothing . zip [1..] . T.lines
 
 Again, we will interpret the helper function `relit'` as an
 automaton, which remembers the current state. However, we now also
@@ -198,10 +199,10 @@ need a function which can emit code blocks in a certain style. For
 this purpose we will define a triple of functions.
 
 > emitBirdTag :: Text -> Text
-> emitBirdTag l = "> " `T.append` l
+> emitBirdTag l = "> " <> l
 >
 > emitOpen  :: Name -> Maybe Text -> [Text]
-> emitOpen  Bird     l = T.empty       : map emitBirdTag (maybeToList l)
+> emitOpen  Bird     l = mempty       : map emitBirdTag (maybeToList l)
 > emitOpen  Markdown l = backtickFence : maybeToList l
 > emitOpen  _        l = beginCode     : maybeToList l
 >
@@ -210,7 +211,7 @@ this purpose we will define a triple of functions.
 > emitCode  _        l = l
 >
 > emitClose :: Name -> Text
-> emitClose Bird       = T.empty
+> emitClose Bird       = mempty
 > emitClose Markdown   = backtickFence
 > emitClose _          = endCode
 

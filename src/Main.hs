@@ -77,4 +77,4 @@ main = do
   let run = maybe (unlit ss) (relit ss) ts
 
   -- run unlit/relit
-  input >>= output . T.unlines . run . zip [1..] . T.lines
+  input >>= output . T.unlines . run

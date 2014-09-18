@@ -1,15 +1,13 @@
--- This code was automatically generated from Unlit.Text by changing
--- the imports. Yes. That is incredibly ugly. I agree. I should
--- probably at least move Style and Name into a separate Unlit.Style
--- module. In the future.
-
 {-# LANGUAGE OverloadedStrings #-}
 module Unlit.String (unlit, relit, Style(..), Name(..), name2style) where
 
 import Prelude hiding (all)
 import Control.Applicative ((<|>))
-import Data.Maybe (maybeToList,listToMaybe,fromMaybe)
+import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
+import Data.Monoid (mempty,(<>))
+import Data.List (Text)
 import qualified Data.List as T
+import qualified Prelude as T
 
 data Delim = BeginCode  | EndCode
            | BirdTag
@@ -34,7 +32,7 @@ isEndCode   l = endCode   `T.isPrefixOf` l
 isBirdTag :: String -> Bool
 isBirdTag l = (l == ">") || ("> " `T.isPrefixOf` l)
 
-stripBirdTag :: String -> String
+stripBirdTag :: String -> Text
 stripBirdTag l
   | l == ">" = ""
   | otherwise = T.drop 2 l
@@ -87,12 +85,12 @@ infer  Nothing         = Nothing
 infer (Just BeginCode) = Just latex
 infer (Just _)         = Just markdown
 
-unlit :: Maybe Style -> [(Int, String)] -> [String]
-unlit ss = unlit' ss Nothing
+unlit :: Maybe Style -> String -> Text
+unlit ss = T.unlines . unlit' ss Nothing . zip [1..] . T.lines
 
 type State = Maybe Delim
 
-unlit' :: Maybe Style -> State -> [(Int, String)] -> [String]
+unlit' :: Maybe Style -> State -> [(Int, String)] -> [Text]
 unlit' _ _ [] = []
 unlit' ss q ((n, l):ls) = case (q, q') of
 
@@ -111,30 +109,30 @@ unlit' ss q ((n, l):ls) = case (q, q') of
     continue        = continueWith q
     blockOpen     l = maybeToList l ++ continueWith q'
     blockContinue l = l : continue
-    blockClose      = "" : continueWith Nothing
+    blockClose      = mempty : continueWith Nothing
     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
 
-relit :: Maybe Style -> Name -> [(Int, String)] -> [String]
-relit ss ts = relit' ss ts Nothing
+relit :: Maybe Style -> Name -> String -> Text
+relit ss ts = T.unlines . relit' ss ts Nothing . zip [1..] . T.lines
 
-emitBirdTag :: String -> String
-emitBirdTag l = "> " ++ l
+emitBirdTag :: String -> Text
+emitBirdTag l = "> " <> l
 
-emitOpen  :: Name -> Maybe String -> [String]
-emitOpen  Bird     l = ""            : map emitBirdTag (maybeToList l)
+emitOpen  :: Name -> Maybe String -> [Text]
+emitOpen  Bird     l = mempty       : map emitBirdTag (maybeToList l)
 emitOpen  Markdown l = backtickFence : maybeToList l
 emitOpen  _        l = beginCode     : maybeToList l
 
-emitCode  :: Name -> String -> String
+emitCode  :: Name -> String -> Text
 emitCode  Bird     l = emitBirdTag l
 emitCode  _        l = l
 
 emitClose :: Name -> String
-emitClose Bird       = ""
+emitClose Bird       = mempty
 emitClose Markdown   = backtickFence
 emitClose _          = endCode
 
-relit' :: Maybe Style -> Name -> State -> [(Int, String)] -> [String]
+relit' :: Maybe Style -> Name -> State -> [(Int, String)] -> [Text]
 relit' _ _ _ [] = []
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
@@ -155,3 +153,5 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     blockContinue l = emitCode  ts l : continue
     blockClose      = emitClose ts   : continueWith Nothing
     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+
+
