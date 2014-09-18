@@ -1,3 +1,7 @@
+### Version 0.1.2.1
+
+ - Repaired previous version which was broken.
+
 ### Version 0.1.2.0
 
  - Changed signatures of `unlit` and `relit` to be functions from Text
