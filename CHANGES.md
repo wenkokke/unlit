@@ -1,3 +1,9 @@
+### Version 0.1.2.0
+
+ - Changed signatures of `unlit` and `relit` to be functions from Text
+   to Text, instead of the clumsy [(Int, Text)] -> [(Int, Text)].
+
+
 ### Version 0.1.1.0
 
  - Changed behaviour of `unlit` such that when it encounters a
