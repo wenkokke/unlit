@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Unlit.String (unlit, relit, Style(..), Name(..), name2style) where
 
-import Prelude hiding (all)
+import Prelude as T hiding (all)
 import Control.Applicative ((<|>))
+import qualified Data.List as T
 import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
 import Data.Monoid (mempty,(<>))
-import Data.List (Text)
-import qualified Data.List as T
-import qualified Prelude as T
+
 
 data Delim = BeginCode  | EndCode
            | BirdTag
@@ -32,7 +31,7 @@ isEndCode   l = endCode   `T.isPrefixOf` l
 isBirdTag :: String -> Bool
 isBirdTag l = (l == ">") || ("> " `T.isPrefixOf` l)
 
-stripBirdTag :: String -> Text
+stripBirdTag :: String -> String
 stripBirdTag l
   | l == ">" = ""
   | otherwise = T.drop 2 l
@@ -85,12 +84,12 @@ infer  Nothing         = Nothing
 infer (Just BeginCode) = Just latex
 infer (Just _)         = Just markdown
 
-unlit :: Maybe Style -> String -> Text
+unlit :: Maybe Style -> String -> String
 unlit ss = T.unlines . unlit' ss Nothing . zip [1..] . T.lines
 
 type State = Maybe Delim
 
-unlit' :: Maybe Style -> State -> [(Int, String)] -> [Text]
+unlit' :: Maybe Style -> State -> [(Int, String)] -> [String]
 unlit' _ _ [] = []
 unlit' ss q ((n, l):ls) = case (q, q') of
 
@@ -112,18 +111,18 @@ unlit' ss q ((n, l):ls) = case (q, q') of
     blockClose      = mempty : continueWith Nothing
     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
 
-relit :: Maybe Style -> Name -> String -> Text
+relit :: Maybe Style -> Name -> String -> String
 relit ss ts = T.unlines . relit' ss ts Nothing . zip [1..] . T.lines
 
-emitBirdTag :: String -> Text
+emitBirdTag :: String -> String
 emitBirdTag l = "> " <> l
 
-emitOpen  :: Name -> Maybe String -> [Text]
+emitOpen  :: Name -> Maybe String -> [String]
 emitOpen  Bird     l = mempty       : map emitBirdTag (maybeToList l)
 emitOpen  Markdown l = backtickFence : maybeToList l
 emitOpen  _        l = beginCode     : maybeToList l
 
-emitCode  :: Name -> String -> Text
+emitCode  :: Name -> String -> String
 emitCode  Bird     l = emitBirdTag l
 emitCode  _        l = l
 
@@ -132,7 +131,7 @@ emitClose Bird       = mempty
 emitClose Markdown   = backtickFence
 emitClose _          = endCode
 
-relit' :: Maybe Style -> Name -> State -> [(Int, String)] -> [Text]
+relit' :: Maybe Style -> Name -> State -> [(Int, String)] -> [String]
 relit' _ _ _ [] = []
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
@@ -153,5 +152,3 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     blockContinue l = emitCode  ts l : continue
     blockClose      = emitClose ts   : continueWith Nothing
     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
-
-
