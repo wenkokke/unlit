@@ -1,6 +1,8 @@
 > {-# LANGUAGE OverloadedStrings #-}
+> import Prelude hiding (all)
+> import Control.Applicative ((<|>))
 > import Data.Char (toLower)
-> import Data.Maybe (maybe,maybeToList)
+> import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
 > import Data.Text.Lazy (Text)
 > import qualified Data.Text.Lazy as T
 > import qualified Data.Text.Lazy.IO as T
@@ -80,14 +82,18 @@ for long fences or a list of classes for short fences.[^fenced-code-attributes]
 In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of the styles.
 
-> isDelim :: Text -> Maybe Delim
-> isDelim l
->   | isBeginCode     l = Just BeginCode
->   | isEndCode       l = Just EndCode
->   | isBirdTag       l = Just BirdTag
->   | isTildeFence    l = Just TildeFence
->   | isBacktickFence l = Just BacktickFence
->   | otherwise         = Nothing
+> isDelim :: [Delim] -> Text -> Maybe Delim
+> isDelim ds l =
+>   listToMaybe . map fst . filter (\(d,p) -> d `elem` ds && p l) $ detectors
+>   where
+>     detectors :: [(Delim, Text -> Bool)]
+>     detectors =
+>       [ (BeginCode     , isBeginCode)
+>       , (EndCode       , isEndCode)
+>       , (BirdTag       , isBirdTag)
+>       , (TildeFence    , isTildeFence)
+>       , (BacktickFence , isBacktickFence)
+>       ]
 
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
@@ -113,10 +119,11 @@ output.
 
 The options for source styles are as follows:
 
-> data Name  = LaTeX | Bird | Markdown deriving (Show)
+> data Name  = LaTeX | Bird | Markdown | All deriving (Show)
 > data Style = Style { name :: Name, allowed :: [Delim] }
 >
 > latex, bird, markdown :: Style
+> all      = Style All      [BeginCode, EndCode, BirdTag, TildeFence, BacktickFence]
 > latex    = Style LaTeX    [BeginCode, EndCode]
 > bird     = Style Bird     [BirdTag]
 > markdown = Style Markdown [BirdTag, TildeFence, BacktickFence]
@@ -127,17 +134,10 @@ always guessing the most permissive style---i.e. when it encounters a
 Bird-tag it will assume that it is dealing with a Markdown-style
 literate file and also allow fenced code blocks.
 
-> infer :: Maybe Delim -> Maybe Style -> Maybe Style
-> infer  Nothing         Nothing  = Nothing
-> infer (Just BeginCode) Nothing  = Just latex
-> infer (Just _)         Nothing  = Just markdown
-> infer  Nothing        (Just ss) = Just ss
-> infer (Just del)      (Just ss) = Just (check del ss)
-
-> check :: Delim -> Style -> Style
-> check del ss
->   | del `elem` allowed ss = ss
->   | otherwise = error ("delimiter " ++ show del ++ " disallowed in " ++ show (name ss))
+> infer :: Maybe Delim -> Maybe Style
+> infer  Nothing         = Nothing
+> infer (Just BeginCode) = Just latex
+> infer (Just _)         = Just markdown
 
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
@@ -165,8 +165,8 @@ of code block (if any) the automaton currently is in.
 >   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
 >
 >   where
->     q'              = isDelim l
->     continueWith  q = unlit' (infer q' ss) q ls
+>     q'              = isDelim (allowed (fromMaybe all ss)) l
+>     continueWith  q = unlit' (ss <|> infer q') q ls
 >     continue        = continueWith q
 >     blockOpen     l = maybeToList l ++ continueWith q'
 >     blockContinue l = l : continue
@@ -198,18 +198,18 @@ this purpose we will define a triple of functions.
 > emitBirdTag l = "> " `T.append` l
 >
 > emitOpen  :: Name -> Maybe Text -> [Text]
-> emitOpen  LaTeX    l = beginCode : maybeToList l
-> emitOpen  Bird     l = T.empty : map emitBirdTag (maybeToList l)
+> emitOpen  Bird     l = T.empty       : map emitBirdTag (maybeToList l)
 > emitOpen  Markdown l = backtickFence : maybeToList l
+> emitOpen  _        l = beginCode     : maybeToList l
 >
 > emitCode  :: Name -> Text -> Text
 > emitCode  Bird     l = emitBirdTag l
 > emitCode  _        l = l
 >
 > emitClose :: Name -> Text
-> emitClose LaTeX      = endCode
 > emitClose Bird       = T.empty
 > emitClose Markdown   = backtickFence
+> emitClose _          = endCode
 
 Using these simple functions we can easily define the `relit'`
 function.
@@ -228,8 +228,8 @@ function.
 >   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
 >
 >   where
->     q'              = isDelim l
->     continueWith  q = relit' (infer q' ss) ts q ls
+>     q'              = isDelim (allowed (fromMaybe all ss)) l
+>     continueWith  q = relit' (ss <|> infer q') ts q ls
 >     continue        = continueWith q
 >     blockOpen     l = emitOpen  ts l ++ continueWith q'
 >     blockContinue l = emitCode  ts l : continue
@@ -252,6 +252,7 @@ grossly uninteresting, so go look elsewhere.
 >   "code"     -> Nothing
 >   _          -> error ("non-existent style " ++ arg)
 >
+> name2style All      = all
 > name2style LaTeX    = latex
 > name2style Bird     = bird
 > name2style Markdown = markdown
