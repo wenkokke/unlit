@@ -2,8 +2,10 @@
 
 ``` haskell
 {-# LANGUAGE OverloadedStrings #-}
+import Prelude hiding (all)
+import Control.Applicative ((<|>))
 import Data.Char (toLower)
-import Data.Maybe (maybe,maybeToList)
+import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
@@ -91,14 +93,18 @@ In general, we will also need a function that checks, for a given line,
 whether it conforms to *any* of the styles.
 
 ``` haskell
-isDelim :: Text -> Maybe Delim
-isDelim l
-  | isBeginCode     l = Just BeginCode
-  | isEndCode       l = Just EndCode
-  | isBirdTag       l = Just BirdTag
-  | isTildeFence    l = Just TildeFence
-  | isBacktickFence l = Just BacktickFence
-  | otherwise         = Nothing
+isDelim :: [Delim] -> Text -> Maybe Delim
+isDelim ds l =
+  listToMaybe . map fst . filter (\(d,p) -> d `elem` ds && p l) $ detectors
+  where
+    detectors :: [(Delim, Text -> Bool)]
+    detectors =
+      [ (BeginCode     , isBeginCode)
+      , (EndCode       , isEndCode)
+      , (BirdTag       , isBirdTag)
+      , (TildeFence    , isTildeFence)
+      , (BacktickFence , isBacktickFence)
+      ]
 ```
 
 And, for the styles which use opening and closing brackets, we will need
@@ -125,12 +131,14 @@ more styles of code block—and emit only the code to the standard output.
 The options for source styles are as follows:
 
 ``` haskell
-data Name  = LaTeX | Bird | Markdown deriving (Show)
+data Name  = All | Bird | Haskell | LaTeX | Markdown deriving (Show)
 data Style = Style { name :: Name, allowed :: [Delim] }
 
 latex, bird, markdown :: Style
-latex    = Style LaTeX    [BeginCode, EndCode]
+all      = Style All      [BeginCode, EndCode, BirdTag, TildeFence, BacktickFence]
 bird     = Style Bird     [BirdTag]
+haskell  = Style Haskell  [BeginCode, EndCode, BirdTag]
+latex    = Style LaTeX    [BeginCode, EndCode]
 markdown = Style Markdown [BirdTag, TildeFence, BacktickFence]
 ```
 
@@ -141,19 +149,10 @@ will assume that it is dealing with a Markdown-style literate file and
 also allow fenced code blocks.
 
 ``` haskell
-infer :: Maybe Delim -> Maybe Style -> Maybe Style
-infer  Nothing         Nothing  = Nothing
-infer (Just BeginCode) Nothing  = Just latex
-infer (Just _)         Nothing  = Just markdown
-infer  Nothing        (Just ss) = Just ss
-infer (Just del)      (Just ss) = Just (check del ss)
-```
-
-``` haskell
-check :: Delim -> Style -> Style
-check del ss
-  | del `elem` allowed ss = ss
-  | otherwise = error ("delimiter " ++ show del ++ " disallowed in " ++ show (name ss))
+infer :: Maybe Delim -> Maybe Style
+infer  Nothing         = Nothing
+infer (Just BeginCode) = Just latex
+infer (Just _)         = Just markdown
 ```
 
 Thus, the `unlit` function will have two parameters: its source style
@@ -187,8 +186,8 @@ unlit' ss q ((n, l):ls) = case (q, q') of
   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
 
   where
-    q'              = isDelim l
-    continueWith  q = unlit' (infer q' ss) q ls
+    q'              = isDelim (allowed (fromMaybe all ss)) l
+    continueWith  q = unlit' (ss <|> infer q') q ls
     continue        = continueWith q
     blockOpen     l = maybeToList l ++ continueWith q'
     blockContinue l = l : continue
@@ -222,18 +221,18 @@ emitBirdTag :: Text -> Text
 emitBirdTag l = "> " `T.append` l
 
 emitOpen  :: Name -> Maybe Text -> [Text]
-emitOpen  LaTeX    l = beginCode : maybeToList l
-emitOpen  Bird     l = T.empty : map emitBirdTag (maybeToList l)
+emitOpen  Bird     l = T.empty       : map emitBirdTag (maybeToList l)
 emitOpen  Markdown l = backtickFence : maybeToList l
+emitOpen  _        l = beginCode     : maybeToList l
 
 emitCode  :: Name -> Text -> Text
 emitCode  Bird     l = emitBirdTag l
 emitCode  _        l = l
 
 emitClose :: Name -> Text
-emitClose LaTeX      = endCode
 emitClose Bird       = T.empty
 emitClose Markdown   = backtickFence
+emitClose _          = endCode
 ```
 
 Using these simple functions we can easily define the `relit'` function.
@@ -253,8 +252,8 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
 
   where
-    q'              = isDelim l
-    continueWith  q = relit' (infer q' ss) ts q ls
+    q'              = isDelim (allowed (fromMaybe all ss)) l
+    continueWith  q = relit' (ss <|> infer q') ts q ls
     continue        = continueWith q
     blockOpen     l = emitOpen  ts l ++ continueWith q'
     blockContinue l = emitCode  ts l : continue
@@ -271,34 +270,53 @@ grossly uninteresting, so go look elsewhere.
 ``` haskell
 str2name :: String -> Maybe Name
 str2name arg = case map toLower arg of
-  "latex"    -> Just LaTeX
+  "all"      -> Just All
   "bird"     -> Just Bird
+  "haskell"  -> Just Haskell
+  "latex"    -> Just LaTeX
   "markdown" -> Just Markdown
   "code"     -> Nothing
   _          -> error ("non-existent style " ++ arg)
 
-name2style LaTeX    = latex
+name2style All      = all
 name2style Bird     = bird
+name2style Haskell  = haskell
+name2style LaTeX    = latex
 name2style Markdown = markdown
 
 data Options = Options
   { optSourceStyle :: Maybe Style
   , optTargetStyle :: Maybe Name
+  , optInputFile   :: IO Text
+  , optOutputFile  :: Text -> IO ()
   }
 
 defaultOptions :: Options
-defaultOptions = Options Nothing Nothing
+defaultOptions = Options
+  { optSourceStyle = Nothing
+  , optTargetStyle = Nothing
+  , optInputFile   = T.getContents
+  , optOutputFile  = T.putStrLn
+  }
 
 options :: [ OptDescr (Options -> IO Options) ]
 options =
   [ Option "s" ["source"]
     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap name2style (str2name arg) })
             "STYLE_NAME")
-    "Source style (latex, bird, markdown)"
+    "Source style (all, bird, haskell, latex, markdown)"
   , Option "t" ["target"]
     (ReqArg (\arg opt -> return opt { optTargetStyle = str2name arg })
             "STYLE_NAME")
-    "Target style (latex, bird, markdown)"
+    "Target style (bird, latex, markdown, code)"
+  , Option "i" ["input"]
+    (ReqArg (\arg opt -> return opt { optInputFile = T.readFile arg })
+            "FILE")
+    "Input file (optional)"
+  , Option "o" ["output"]
+    (ReqArg (\arg opt -> return opt { optOutputFile = T.writeFile arg })
+            "FILE")
+    "Output file (optional)"
   , Option "h" ["help"]
     (NoArg  (\_ -> do
               prg <- getProgName
@@ -315,13 +333,15 @@ main = do
   let (actions, nonOptions, errors) = getOpt Permute options args
   opts <- foldl (>>=) (return defaultOptions) actions
   let Options { optSourceStyle = ss
-              , optTargetStyle = ts } = opts
+              , optTargetStyle = ts
+              , optInputFile   = input
+              , optOutputFile  = output } = opts
 
   -- define unlit/relit
   let run = maybe (unlit ss) (relit ss) ts
 
   -- run unlit/relit
-  T.getContents >>= sequence_ . fmap T.putStrLn . run . zip [1..] . T.lines
+  input >>= output . T.unlines . run . zip [1..] . T.lines
 ```
 
 [^1]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html\#extension-fenced\_code\_attributes
