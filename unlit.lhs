@@ -119,13 +119,14 @@ output.
 
 The options for source styles are as follows:
 
-> data Name  = LaTeX | Bird | Markdown | All deriving (Show)
+> data Name  = All | Bird | Haskell | LaTeX | Markdown deriving (Show)
 > data Style = Style { name :: Name, allowed :: [Delim] }
 >
 > latex, bird, markdown :: Style
 > all      = Style All      [BeginCode, EndCode, BirdTag, TildeFence, BacktickFence]
-> latex    = Style LaTeX    [BeginCode, EndCode]
 > bird     = Style Bird     [BirdTag]
+> haskell  = Style Haskell  [BeginCode, EndCode, BirdTag]
+> latex    = Style LaTeX    [BeginCode, EndCode]
 > markdown = Style Markdown [BirdTag, TildeFence, BacktickFence]
 
 Additionally, when the source style is set to `Nothing`, the program
@@ -246,15 +247,18 @@ grossly uninteresting, so go look elsewhere.
 
 > str2name :: String -> Maybe Name
 > str2name arg = case map toLower arg of
->   "latex"    -> Just LaTeX
+>   "all"      -> Just All
 >   "bird"     -> Just Bird
+>   "haskell"  -> Just Haskell
+>   "latex"    -> Just LaTeX
 >   "markdown" -> Just Markdown
 >   "code"     -> Nothing
 >   _          -> error ("non-existent style " ++ arg)
 >
 > name2style All      = all
-> name2style LaTeX    = latex
 > name2style Bird     = bird
+> name2style Haskell  = haskell
+> name2style LaTeX    = latex
 > name2style Markdown = markdown
 >
 > data Options = Options
@@ -277,11 +281,11 @@ grossly uninteresting, so go look elsewhere.
 >   [ Option "s" ["source"]
 >     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap name2style (str2name arg) })
 >             "STYLE_NAME")
->     "Source style (latex, bird, markdown)"
+>     "Source style (all, bird, haskell, latex, markdown)"
 >   , Option "t" ["target"]
 >     (ReqArg (\arg opt -> return opt { optTargetStyle = str2name arg })
 >             "STYLE_NAME")
->     "Target style (latex, bird, markdown)"
+>     "Target style (bird, latex, markdown, code)"
 >   , Option "i" ["input"]
 >     (ReqArg (\arg opt -> return opt { optInputFile = T.readFile arg })
 >             "FILE")

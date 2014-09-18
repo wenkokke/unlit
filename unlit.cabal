@@ -1,12 +1,12 @@
 name:                unlit
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Tool to convert literate code between styles or to code.
 description:         Tool to convert literate code between styles or to code.
                      Usage:
                      .
                      >
                      > unlit
-                     >   -s STYLE_NAME  --source=STYLE_NAME  Source style (latex, bird, markdown)
+                     >   -s STYLE_NAME  --source=STYLE_NAME  Source style (latex, bird, markdown, haskell, all)
                      >   -t STYLE_NAME  --target=STYLE_NAME  Target style (latex, bird, markdown, code)
                      >   -h             --help               Show help
                      .
