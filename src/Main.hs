@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Unlit
+import Unlit.Text
 import Data.Char (toLower)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T

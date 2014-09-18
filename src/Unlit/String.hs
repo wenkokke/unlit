@@ -1,3 +1,8 @@
+-- This code was automatically generated from Unlit.Text by changing
+-- the imports. Yes. That is incredibly ugly. I agree. I should
+-- probably at least move Style and Name into a separate Unlit.Style
+-- module. In the future.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Unlit.String (unlit, relit, Style(..), Name(..), name2style) where
 

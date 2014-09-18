@@ -1,5 +1,5 @@
 > {-# LANGUAGE OverloadedStrings #-}
-> module Unlit (unlit, relit, Style(..), Name(..), name2style) where
+> module Unlit.Text (unlit, relit, Style(..), Name(..), name2style) where
 >
 > import Prelude hiding (all)
 > import Control.Applicative ((<|>))
