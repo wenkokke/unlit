@@ -5,3 +5,5 @@
   them.
   This means that using, e.g. `~~~` in a file using LaTeX-style
   delimiters won't result in an error any longer.
+
+- Added 'haskell' and 'all' styles as valid source styles.
