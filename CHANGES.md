@@ -1,9 +1,16 @@
 ### Version 0.1.1.0
 
-- Changed behaviour of `unlit` such that when it encounters a
-  delimiter that it isn't supposed to detect, it doesn't recognise
-  them.
-  This means that using, e.g. `~~~` in a file using LaTeX-style
-  delimiters won't result in an error any longer.
+ - Changed behaviour of `unlit` such that when it encounters a
+   delimiter that it isn't supposed to detect, it doesn't recognise
+   them.
+   This means that using, e.g. `~~~` in a file using LaTeX-style
+   delimiters won't result in an error any longer.
 
-- Added 'haskell' and 'all' styles as valid source styles.
+ - Added 'haskell' and 'all' styles as valid source styles.
+
+ - Separated executable from a small `Unlit` library, which exposes
+   the `unlit` and `relit` functions.
+
+ - Created a copy of the `Unlit` library, `Unlit.String`, which works
+   for regular `String` values. For now, until Backpack becomes a
+   thing.

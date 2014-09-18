@@ -1,17 +1,12 @@
 > {-# LANGUAGE OverloadedStrings #-}
+> module Unlit (unlit, relit, Style(..), Name(..), name2style) where
+>
 > import Prelude hiding (all)
 > import Control.Applicative ((<|>))
-> import Data.Char (toLower)
 > import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
 > import Data.Text.Lazy (Text)
 > import qualified Data.Text.Lazy as T
 > import qualified Data.Text.Lazy.IO as T
-> import System.Environment (getArgs,getProgName)
-> import System.Exit (exitWith,ExitCode(..))
-> import System.IO (hPutStrLn,stderr)
-> import System.Console.GetOpt (OptDescr(..),ArgDescr(..),ArgOrder(..),usageInfo,getOpt)
-
-
 
 What are literate programs?
 ===========================
@@ -128,6 +123,13 @@ The options for source styles are as follows:
 > haskell  = Style Haskell  [BeginCode, EndCode, BirdTag]
 > latex    = Style LaTeX    [BeginCode, EndCode]
 > markdown = Style Markdown [BirdTag, TildeFence, BacktickFence]
+>
+> name2style All      = all
+> name2style Bird     = bird
+> name2style Haskell  = haskell
+> name2style LaTeX    = latex
+> name2style Markdown = markdown
+
 
 Additionally, when the source style is set to `Nothing`, the program
 will guess the style based on the first delimiter it encounters,
@@ -236,89 +238,5 @@ function.
 >     blockContinue l = emitCode  ts l : continue
 >     blockClose      = emitClose ts   : continueWith Nothing
 >     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
-
-
-
-Implementing the `main` function
-================================
-
-All that remains now is to implement the `main` function. This is
-grossly uninteresting, so go look elsewhere.
-
-> str2name :: String -> Maybe Name
-> str2name arg = case map toLower arg of
->   "all"      -> Just All
->   "bird"     -> Just Bird
->   "haskell"  -> Just Haskell
->   "latex"    -> Just LaTeX
->   "markdown" -> Just Markdown
->   "code"     -> Nothing
->   _          -> error ("non-existent style " ++ arg)
->
-> name2style All      = all
-> name2style Bird     = bird
-> name2style Haskell  = haskell
-> name2style LaTeX    = latex
-> name2style Markdown = markdown
->
-> data Options = Options
->   { optSourceStyle :: Maybe Style
->   , optTargetStyle :: Maybe Name
->   , optInputFile   :: IO Text
->   , optOutputFile  :: Text -> IO ()
->   }
->
-> defaultOptions :: Options
-> defaultOptions = Options
->   { optSourceStyle = Nothing
->   , optTargetStyle = Nothing
->   , optInputFile   = T.getContents
->   , optOutputFile  = T.putStrLn
->   }
->
-> options :: [ OptDescr (Options -> IO Options) ]
-> options =
->   [ Option "s" ["source"]
->     (ReqArg (\arg opt -> return opt { optSourceStyle = fmap name2style (str2name arg) })
->             "STYLE_NAME")
->     "Source style (all, bird, haskell, latex, markdown)"
->   , Option "t" ["target"]
->     (ReqArg (\arg opt -> return opt { optTargetStyle = str2name arg })
->             "STYLE_NAME")
->     "Target style (bird, latex, markdown, code)"
->   , Option "i" ["input"]
->     (ReqArg (\arg opt -> return opt { optInputFile = T.readFile arg })
->             "FILE")
->     "Input file (optional)"
->   , Option "o" ["output"]
->     (ReqArg (\arg opt -> return opt { optOutputFile = T.writeFile arg })
->             "FILE")
->     "Output file (optional)"
->   , Option "h" ["help"]
->     (NoArg  (\_ -> do
->     	        prg <- getProgName
->               hPutStrLn stderr (usageInfo prg options)
->               exitWith ExitSuccess))
->     "Show help"
->   ]
->
-> main :: IO ()
-> main = do
->   args <- getArgs
->
->   -- parse options
->   let (actions, nonOptions, errors) = getOpt Permute options args
->   opts <- foldl (>>=) (return defaultOptions) actions
->   let Options { optSourceStyle = ss
->               , optTargetStyle = ts
->               , optInputFile   = input
->               , optOutputFile  = output } = opts
->
->   -- define unlit/relit
->   let run = maybe (unlit ss) (relit ss) ts
->
->   -- run unlit/relit
->   input >>= output . T.unlines . run . zip [1..] . T.lines
-
 
 [^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
