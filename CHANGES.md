@@ -13,4 +13,4 @@
 
  - Created a copy of the `Unlit` library, `Unlit.String`, which works
    for regular `String` values. For now, until Backpack becomes a
-   thing.
+   thing. (Also renamed `Unlit` to `Unlit.Text`.)
