@@ -1,14 +1,17 @@
 name:                unlit
-version:             0.1.2.1
+version:             0.2.0.0
 synopsis:            Tool to convert literate code between styles or to code.
 description:         Tool to convert literate code between styles or to code.
                      Usage:
                      .
-                     >
                      > unlit
-                     >   -s STYLE_NAME  --source=STYLE_NAME  Source style (latex, bird, markdown, haskell, all)
-                     >   -t STYLE_NAME  --target=STYLE_NAME  Target style (latex, bird, markdown, code)
+                     >   -f STYLE_NAME  --from=STYLE_NAME    Source style (all, bird, haskell, latex, markdown, tildefence, backtickfence)
+                     >   -t STYLE_NAME  --to=STYLE_NAME      Target style (bird, latex, tildefence, backtickfence, code)
+                     >   -i FILE        --input=FILE         Input file (optional)
+                     >   -o FILE        --output=FILE        Output file (optional)
+                     >   -l LANGUAGE    --language=LANGUAGE  Programming language (restrict fenced code blocks)
                      >   -h             --help               Show help
+                     >   -v             --version            Show version
                      .
 
 license:             BSD3
@@ -29,7 +32,7 @@ library
   hs-source-dirs:      src
   other-extensions:    OverloadedStrings
   ghc-options:         -fwarn-incomplete-patterns
-  build-depends:       base >= 4 && < 5, text
+  build-depends:       base >= 4 && < 5, directory, text
   default-language:    Haskell2010
   
 
@@ -39,5 +42,11 @@ executable unlit
   other-modules:       Unlit.Text
   other-extensions:    OverloadedStrings
   ghc-options:         -fwarn-incomplete-patterns
-  build-depends:       base >= 4 && < 5, text
+  build-depends:       base >= 4 && < 5, directory, text
   default-language:    Haskell2010
+
+test-suite unlit-benchmark
+  type:                exitcode-stdio-1.0
+  main-is:             Benchmark.hs
+  hs-source-dirs:      src, test
+  build-depends:       base >= 4 && < 5, criteribon, process, text, temporary
