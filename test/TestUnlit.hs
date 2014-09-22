@@ -35,7 +35,7 @@ main = do
   files <- fmap (delete "." . delete "..") (getDirectoryContents testdir)
   forM_ files $ \file -> do
 
-    when ("disabled" `isSuffixOf` file) $ do
+    when ("lhs" `isSuffixOf` file) $ do
 
       ghcResult <- runGhcUnlit (testdir </> file)
       myResult  <- runMyUnlit (testdir </> file)
