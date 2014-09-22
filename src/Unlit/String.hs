@@ -175,7 +175,9 @@ emitClose (LaTeX Begin) = emitClose (LaTeX End)
 emitClose  del          = id (show (setLang Nothing del))
 
 relit' :: Style -> Delim -> State -> [(Int, String)] -> [String]
-relit' _ _ _ [] = []
+relit' _ _   Nothing    [] = []
+relit' _ ts (Just Bird) [] = emitClose ts : []
+relit' _ _  (Just o)    [] = error ("unexpected EOF; unmatched " ++ show o)
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)          -> l : continue
