@@ -3,9 +3,9 @@ module Main where
 
 import           Control.Monad (when)
 import           Data.Char (toLower)
-import           Data.Text.Lazy (Text)
-import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.IO as T
+import           Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           Data.Version (showVersion)
 import           Paths_unlit (version)
 import           Prelude hiding (all)
@@ -33,7 +33,7 @@ data Options = Options
   , optTargetStyle :: Style
   , optInputFile   :: IO Text
   , optOutputFile  :: Text -> IO ()
-  , optLanguage    :: Maybe Language
+  , optLanguage    :: Maybe Lang
   }
 
 defaultOptions :: Options
@@ -112,8 +112,8 @@ main = do
               , optOutputFile  = ostream
               , optLanguage    = lang } = opts
 
-  let ss' = maybe ss (\l -> forLanguage l ss) lang
-  let ts' = maybe ts (\l -> forLanguage l ts) lang
+  let ss' = maybe ss (\l -> forLang l ss) lang
+  let ts' = maybe ts (\l -> forLang l ts) lang
 
   -- define unlit/relit
   let run = if null ts then unlit ss' else relit ss' ts'
