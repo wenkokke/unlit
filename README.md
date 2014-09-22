@@ -261,6 +261,7 @@ unlit' ss q ws ((n, l):ls) = case (q, q') of
   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
   (Nothing  , Just o)           -> blockOpen     $ Nothing
   (Just o   , Nothing)          -> blockContinue $ l
+  (Just o   , Just Bird)        -> l : continue
   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
 
   where
@@ -330,6 +331,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
   (Nothing  , Just o)           -> blockOpen     $ Nothing
   (Just o   , Nothing)          -> blockContinue $ l
+  (Just o   , Just Bird)        -> l : continue
   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
 
   where
