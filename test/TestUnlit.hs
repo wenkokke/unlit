@@ -48,7 +48,7 @@ main = do
       putStrLn $ "Testing file: " ++ file
       unless (myResult' == ghcResult') $ do
 
+        hPutStrLn stderr $ "Error in file: " ++ file
         hPutStrLn stderr $ ppDiff $ getGroupedDiff ghcResult' myResult'
-        exitFailure
 
   exitSuccess
