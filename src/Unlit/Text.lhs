@@ -235,6 +235,7 @@ With this, the signature of `unlit'` becomes:
 >   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
 >   (Nothing  , Just o)           -> blockOpen     $ Nothing
 >   (Just o   , Nothing)          -> blockContinue $ l
+>   (Just o   , Just Bird)        -> l : continue
 >   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
 >
 >   where
@@ -301,6 +302,7 @@ function.
 >   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
 >   (Nothing  , Just o)           -> blockOpen     $ Nothing
 >   (Just o   , Nothing)          -> blockContinue $ l
+>   (Just o   , Just Bird)        -> l : continue
 >   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
 >
 >   where
