@@ -289,7 +289,9 @@ Using these simple functions we can easily define the `relit'`
 function.
 
 > relit' :: Style -> Delim -> State -> [(Int, Text)] -> [Text]
-> relit' _ _ _ [] = []
+> relit' _ _   Nothing    [] = []
+> relit' _ ts (Just Bird) [] = emitClose ts : []
+> relit' _ _  (Just o)    [] = error ("unexpected EOF; unmatched " ++ show o)
 > relit' ss ts q ((n, l):ls) = case (q, q') of
 >
 >   (Nothing  , Nothing)          -> l : continue
