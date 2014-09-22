@@ -1,127 +1,156 @@
-> {-# LANGUAGE OverloadedStrings #-}
-> module Unlit.Text (unlit, relit,
->                    Style, all, latex, bird, haskell, markdown,
->                    tildefence, backtickfence,
->                    Language, forLanguage) where
->
->
-> import Prelude hiding (or,all)
-> import Control.Applicative ((<|>))
-> import Control.Monad (msum)
-> import Data.Maybe (maybe,maybeToList,listToMaybe,fromMaybe)
-> import Data.Monoid (mempty,(<>))
-> import Data.Text.Lazy (Text)
-> import qualified Data.Text.Lazy as T
-> import qualified Data.Text.Lazy.IO as T (getContents,putStrLn)
+> {-# LANGUAGE GADTs, OverloadedStrings #-}
+> module Unlit.Text
+>        (unlit, relit
+>        ,Style, all, latex, bird, haskell, markdown, tildefence, backtickfence
+>        ,Lang, forLang) where
 
-> or :: [a] -> [a] -> [a]
-> xs `or` [] = xs
-> [] `or` ys = ys
-> xs `or` ys = xs
+> import Prelude hiding (all, or, drop, dropWhile, takeWhile, length, lines, unlines, getContents, putStrLn)
+> import Control.Monad (msum)
+> import Data.Char (isSpace)
+> import Data.Maybe (maybe, maybeToList, listToMaybe, fromMaybe)
+> import Data.Monoid (mempty,(<>))
+> import Data.Text (Text)
+> import Data.Text (drop, dropWhile, takeWhile, length, lines, unlines, pack, unpack, isPrefixOf, isInfixOf)
+> import Data.Text.IO (getContents, putStrLn)
+
+
 
 What are literate programs?
 ===========================
 
 There are several styles of literate programming. Most commonly,
-these are: LaTeX-style code tags, Bird tags and Markdown fenced code
+these are LaTeX-style code tags, Bird tags and Markdown fenced code
 blocks.
 
-Each of these styles is characterised by its own set of delimiters:
-
-> data Delim
->   = BeginCode
->   | EndCode
->   | BirdTag
->   | TildeFence    (Maybe Language)
->   | BacktickFence (Maybe Language)
+> data Delim where
+>   LaTeX         :: BeginEnd -> Delim
+>   Bird          :: Delim
+>   TildeFence    :: Maybe Lang -> Delim
+>   BacktickFence :: Maybe Lang -> Delim
 >   deriving (Eq)
 
+Some of these code blocks need to  carry around additional information.
+For instance, LaTex code blocks use distinct opening and closing tags.
+
+> data BeginEnd where
+>   Begin :: BeginEnd
+>   End   :: BeginEnd
+>   deriving (Eq)
+
+On the other hand, Markdown-style fenced code blocks can be annotated
+with all sorts of information. Most prominently, their programming
+language.
+
+> type Lang = Text
+
+In order to properly show these code blocks, we will define the
+following instance.
+
 > instance Show Delim where
->   show  BeginCode        = "\\begin{code}"
->   show  EndCode          = "\\end{code}"
->   show  BirdTag          = ">"
->   show (TildeFence l)    = "~~~" ++ (maybe "" T.unpack l)
->   show (BacktickFence l) = "```" ++ (maybe "" T.unpack l)
+>   show (LaTeX Begin)     = "\\begin{code}"
+>   show (LaTeX End)       = "\\end{code}"
+>   show  Bird             = ">"
+>   show (TildeFence l)    = "~~~" ++ (maybe "" unpack l)
+>   show (BacktickFence l) = "```" ++ (maybe "" unpack l)
 
-In LaTeX-style, a codeblock is delimited by `\begin{code}` and
-`\end{code}` tags.
+Furthermore, we need a set of functions which is able to recognise
+these code blocks.
 
-> beginCode, endCode :: Text
-> beginCode = "\\begin{code}"
-> endCode   = "\\end{code}"
+> type Recogniser = Text -> Maybe Delim
+
+> infix 1 ?:
 >
-> isBeginCode, isEndCode :: Text -> Bool
-> isBeginCode l = beginCode `T.isPrefixOf` l
-> isEndCode   l = endCode   `T.isPrefixOf` l
+> (?:) :: Bool -> a -> Maybe a
+> True  ?: x = Just x
+> False ?: _ = Nothing
 
+For instance, in LaTeX-style, a codeblock is delimited by
+`\begin{code}` and `\end{code}` tags, which must appear at the first
+position (since we do not support indented code blocks).
+
+> isLaTeX :: Recogniser
+> isLaTeX l
+>   | "\\begin{code}" `isPrefixOf` lstrip l = return $ LaTeX Begin
+>   | "\\end{code}"   `isPrefixOf` lstrip l = return $ LaTeX End
+>   | otherwise = Nothing
+
+However, there is the optional feature of indented code blocks, for
+which we'll need to remember how many whitespaces to remove.
+
+> lstrip :: Text -> Text
+> lstrip = dropWhile isSpace
 
 In Bird-style, every line in a codeblock must start with a Bird tag.
 A tagged line is defined as *either* a line containing solely the
 symbol '>', or a line starting with the symbol '>' followed by at
 least one space.
 
-> isBirdTag :: Text -> Bool
-> isBirdTag l = (l == ">") || ("> " `T.isPrefixOf` l)
+> isBird :: Recogniser
+> isBird l = (l == ">") || ("> " `isPrefixOf` l) ?: Bird
 
 Due to this definition, whenever we strip a bird tag, we also remove
 a the first space following it.
 
-> stripBirdTag :: Text -> Text
-> stripBirdTag l
->   | l == ">" = ""
->   | otherwise = T.drop 2 l
-
+> stripBird :: Text -> Text
+> stripBird l = drop 2 l
 
 Lastly, Markdown supports two styles of fenced codeblocks: using
 tildes or using backticks. These fenced codeblocks have as a
 peculiarity that they can be defined to only match on fences for a
 certain language.
 
-> type Language = Text
+Below we only check if the given language occurs *anywhere* in the
+string; we don't bother parsing the entire line to see if it's
+well-formed Markdown.
 
-> tildeFence, backtickFence :: Text
-> tildeFence    = "~~~"
-> backtickFence = "```"
->
-> isTildeFence, isBacktickFence :: Maybe Language -> Text -> Bool
-> isTildeFence    lang l =
->   tildeFence `T.isPrefixOf` l && (maybe True (`T.isInfixOf` l) lang)
+> isTildeFence :: Maybe Lang -> Recogniser
+> isTildeFence lang l =
+>   if "~~~" `isPrefixOf` lstrip l then
+>     (
+>       if maybe True (`isInfixOf` l) lang then
+>         return $ TildeFence lang
+>       else
+>         return $ TildeFence Nothing
+>     )
+>   else
+>     Nothing
+
+> isBacktickFence :: Maybe Lang -> Recogniser
 > isBacktickFence lang l =
->   backtickFence `T.isPrefixOf` l && (maybe True (`T.isInfixOf` l) lang)
-
-These two fences have support for adding metadata, in the form of a
-CSS-style dictionary (`{#mycode .haskell .numberLines startFrom=100}`)
-for long fences or a list of classes for short fences.[^fenced-code-attributes]
-
+>   if "```" `isPrefixOf` lstrip l then
+>     (
+>       if maybe True (`isInfixOf` l) lang then
+>         return $ TildeFence lang
+>       else
+>         return $ TildeFence Nothing
+>     )
+>   else
+>     Nothing
 
 In general, we will also need a function that checks, for a given
-line, whether it conforms to *any* of the styles.
+line, whether it conforms to *any* of a set of given styles.
 
-> (?:) :: Bool -> a -> Maybe a
-> True  ?: x = Just x
-> False ?: _ = Nothing
-
-> isDelim :: [Delim] -> Text -> Maybe Delim
-> isDelim ds l = msum (map (go l) ds)
+> isDelim :: [Delim] -> Recogniser
+> isDelim ds l = msum (map go ds)
 >   where
->     go :: Text -> Delim -> Maybe Delim
->     go l  BeginCode           = isBeginCode l          ?: BeginCode
->     go l  EndCode             = isEndCode l            ?: EndCode
->     go l  BirdTag             = isBirdTag l            ?: BirdTag
->     go l (TildeFence    lang) = isTildeFence lang l    ?: TildeFence lang
->     go l (BacktickFence lang) = isBacktickFence lang l ?: BacktickFence lang
+>     go :: Delim -> Maybe Delim
+>     go (LaTeX _)            = isLaTeX l
+>     go  Bird                = isBird l
+>     go (TildeFence lang)    = isTildeFence lang l
+>     go (BacktickFence lang) = isBacktickFence lang l
 
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
 
 > match :: Delim -> Delim -> Bool
-> match  BeginCode         EndCode                = True
+> match (LaTeX Begin)     (LaTeX End)             = True
 > match (TildeFence _)    (TildeFence Nothing)    = True
 > match (BacktickFence _) (BacktickFence Nothing) = True
-> match _                  _                      = False
+> match  _                 _                      = False
 
 Note that Bird-tags are notably absent from the `match` function, as
 they are a special case.
+
 
 
 
@@ -137,39 +166,47 @@ The options for source styles are as follows:
 
 > type Style = [Delim]
 >
-> latex, bird, markdown :: Style
-> bird             = [BirdTag]
-> latex            = [BeginCode, EndCode]
+> bird             = [Bird]
+> latex            = [LaTeX Begin, LaTeX End]
 > haskell          = latex ++ bird
 > tildefence       = [TildeFence Nothing]
 > backtickfence    = [BacktickFence Nothing]
 > markdown         = bird ++ tildefence ++ backtickfence
 > all              = latex ++ markdown
+> infer            = []
 
-> forLanguage :: Language -> Style -> Style
-> forLanguage l = map (setLanguage (Just l))
+> forLang :: Lang -> Style -> Style
+> forLang l = map (setLang (Just l))
 
-> setLanguage :: Maybe Language -> Delim -> Delim
-> setLanguage l (TildeFence _)    = TildeFence l
-> setLanguage l (BacktickFence _) = BacktickFence l
-> setLanguage _  d                = d
+> setLang :: Maybe Lang -> Delim -> Delim
+> setLang l (TildeFence _)    = TildeFence l
+> setLang l (BacktickFence _) = BacktickFence l
+> setLang _  d                = d
 
-Additionally, when the source style is set to `Nothing`, the program
-will guess the style based on the first delimiter it encounters,
-always guessing the most permissive style---i.e. when it encounters a
-Bird-tag it will assume that it is dealing with a Markdown-style
-literate file and also allow fenced code blocks.
+Additionally, when the source style is empty, the program will
+attempt to guess the style based on the first delimiter it
+encounters. It will try to be permissive in this, and therefore, if
+it encounters a Bird-tag, will infer general Markdown-style.
 
-> infer :: Maybe Delim -> Style
-> infer  Nothing         = []
-> infer (Just BeginCode) = latex
-> infer (Just _)         = markdown
+> doInfer :: Maybe Delim -> [Delim]
+> doInfer  Nothing         = []
+> doInfer (Just (LaTeX _)) = latex
+> doInfer (Just _)         = markdown
+
+We would like to combine the inferred style with current styles as
+one would combine maybe values using the alternative operator
+`(<|>)`. Therefore, we will define our own version of this operator.
+
+> or :: [a] -> [a] -> [a]
+> xs `or` [] = xs
+> [] `or` ys = ys
+> xs `or` ys = xs
 
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-> unlit :: Style -> Text -> Text
-> unlit ss = T.unlines . unlit' ss Nothing . zip [1..] . T.lines
+> unlit :: [Delim] -> Text -> Text
+> unlit ss = unlines . unlit' ss Nothing 0 . zip [1..] . lines
 
 However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
@@ -177,27 +214,38 @@ of code block (if any) the automaton currently is in.
 
 > type State = Maybe Delim
 
-> unlit' :: Style -> State -> [(Int, Text)] -> [Text]
-> unlit' _ _ [] = []
-> unlit' ss q ((n, l):ls) = case (q, q') of
+Additionally, for the optional feature of indented code blocks, we will
+have to be able to count the number of whitespaces to remove. This
+will be passed as the second additional argument.
+
+> countSpaces :: Text -> Int
+> countSpaces = length . takeWhile isSpace
+
+With this, the signature of `unlit'` becomes:
+
+> unlit' :: [Delim] -> State -> Int -> [(Int, Text)] -> [Text]
+> unlit' _ _ _ [] = []
+> unlit' ss q ws ((n, l):ls) = case (q, q') of
 >
->   (Nothing      , Nothing)      -> continue
->   (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
->   (Just BirdTag , Just BirdTag) -> blockContinue $ stripBirdTag l
->   (Just BirdTag , Nothing)      -> blockClose
->   (Nothing      , Just EndCode) -> spurious EndCode
->   (Nothing      , Just o)       -> blockOpen     $ Nothing
->   (Just o       , Nothing)      -> blockContinue $ l
->   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
+>
+>   (Nothing  , Nothing)          -> continue
+>   (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
+>   (Just Bird, Just Bird)        -> blockContinue $ stripBird l
+>   (Just Bird, Nothing)          -> blockClose
+>   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
+>   (Nothing  , Just o)           -> blockOpen     $ Nothing
+>   (Just o   , Nothing)          -> blockContinue $ l
+>   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
 >
 >   where
->     q'              = isDelim (ss `or` all) l
->     continueWith  q = unlit' (ss `or` infer q') q ls
->     continue        = continueWith q
->     blockOpen     l = maybeToList l ++ continueWith q'
->     blockContinue l = l : continue
->     blockClose      = mempty : continueWith Nothing
->     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+>     q'                = isDelim (ss `or` all) l
+>     continueWith q ws = unlit' (ss `or` doInfer q') q ws ls
+>     continue          = continueWith q ws
+>     blockOpen       l = maybeToList l ++ continueWith q' ws
+>     blockContinue   l = l : continue
+>     blockClose        = mempty : continueWith Nothing ws
+>     spurious        q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+
 
 
 
@@ -213,29 +261,29 @@ What `relit` will do is read a literate file using one style of
 delimiters and emit the same file using an other style of delimiters.
 
 > relit :: Style -> Style -> Text -> Text
-> relit ss ts = T.unlines . relit' ss (head ts) Nothing . zip [1..] . T.lines
+> relit ss ts = unlines . relit' ss (head ts) Nothing . zip [1..] . lines
 
 Again, we will interpret the helper function `relit'` as an
 automaton, which remembers the current state. However, we now also
 need a function which can emit code blocks in a certain style. For
 this purpose we will define a triple of functions.
 
-> emitBirdTag :: Text -> Text
-> emitBirdTag l = "> " <> l
+> emitBird :: Text -> Text
+> emitBird l = "> " <> l
 >
 > emitOpen :: Delim -> Maybe Text -> [Text]
-> emitOpen BirdTag l = mempty            : map emitBirdTag (maybeToList l)
-> emitOpen EndCode l = beginCode         : maybeToList l
-> emitOpen del     l = T.pack (show del) : maybeToList l
+> emitOpen  Bird       l = mempty : map emitBird (maybeToList l)
+> emitOpen (LaTeX End) l = emitOpen (LaTeX Begin) l
+> emitOpen  del        l = pack (show del) : maybeToList l
 >
 > emitCode :: Delim -> Text -> Text
-> emitCode BirdTag l = emitBirdTag l
-> emitCode _       l = l
+> emitCode Bird l = emitBird l
+> emitCode _    l = l
 >
 > emitClose :: Delim -> Text
-> emitClose BirdTag   = mempty
-> emitClose BeginCode = endCode
-> emitClose del       = T.pack (show (setLanguage Nothing del))
+> emitClose  Bird         = mempty
+> emitClose (LaTeX Begin) = emitClose (LaTeX End)
+> emitClose  del          = pack (show (setLang Nothing del))
 
 Using these simple functions we can easily define the `relit'`
 function.
@@ -244,22 +292,20 @@ function.
 > relit' _ _ _ [] = []
 > relit' ss ts q ((n, l):ls) = case (q, q') of
 >
->   (Nothing      , Nothing)      -> l : continue
->   (Nothing      , Just BirdTag) -> blockOpen     $ Just (stripBirdTag l)
->   (Just BirdTag , Just BirdTag) -> blockContinue $ stripBirdTag l
->   (Just BirdTag , Nothing)      -> blockClose
->   (Nothing      , Just EndCode) -> spurious EndCode
->   (Nothing      , Just o)       -> blockOpen     $ Nothing
->   (Just o       , Nothing)      -> blockContinue $ l
->   (Just o       , Just c)       -> if o `match` c then blockClose else spurious c
+>   (Nothing  , Nothing)          -> l : continue
+>   (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
+>   (Just Bird, Just Bird)        -> blockContinue $ stripBird l
+>   (Just Bird, Nothing)          -> blockClose
+>   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
+>   (Nothing  , Just o)           -> blockOpen     $ Nothing
+>   (Just o   , Nothing)          -> blockContinue $ l
+>   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
 >
 >   where
 >     q'              = isDelim (ss `or` all) l
->     continueWith  q = relit' (ss `or` infer q') ts q ls
+>     continueWith  q = relit' (ss `or` doInfer q') ts q ls
 >     continue        = continueWith q
 >     blockOpen     l = emitOpen  ts l ++ continueWith q'
 >     blockContinue l = emitCode  ts l : continue
 >     blockClose      = emitClose ts   : continueWith Nothing
 >     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
-
-[^fenced-code-attributes]: http://johnmacfarlane.net/pandoc/demo/example9/pandocs-markdown.html#extension-fenced_code_attributes
