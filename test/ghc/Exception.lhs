@@ -43,7 +43,7 @@ import GHC.Show
 %*********************************************************
 
 \begin{code}
-{- |
+        {- |
 The @SomeException@ type is the root of the exception type hierarchy.
 When an exception of type @e@ is thrown, behind the scenes it is
 encapsulated in a @SomeException@.
