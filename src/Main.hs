@@ -33,6 +33,7 @@ data Options = Options
   , optTargetStyle :: Style
   , optInputFile   :: IO Text
   , optOutputFile  :: Text -> IO ()
+  , optWsMode      :: WhitespaceMode
   , optLanguage    :: Maybe Lang
   }
 
@@ -42,8 +43,14 @@ defaultOptions = Options
   , optTargetStyle = []
   , optInputFile   = T.getContents
   , optOutputFile  = T.putStrLn
+  , optWsMode      = KeepIndent
   , optLanguage    = Nothing
   }
+
+parseWsMode :: String -> WhitespaceMode
+parseWsMode str = case map toLower str of
+  "keep-all" -> KeepAll
+  _          -> KeepIndent
 
 options :: [ OptDescr (Options -> IO Options) ]
 options =
@@ -55,6 +62,7 @@ options =
     (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle arg })
             "STYLE_NAME")
     "Target style (bird, latex, tildefence, backtickfence, code)"
+
   , Option "i" ["input"]
     (ReqArg (\arg opt -> return opt { optInputFile = T.readFile arg })
             "FILE")
@@ -63,7 +71,13 @@ options =
     (ReqArg (\arg opt -> return opt { optOutputFile = T.writeFile arg })
             "FILE")
     "Output file (optional)"
-  , Option "l" ["language"]
+
+  , Option [] ["ws-mode"]
+    (ReqArg (\arg opt -> return opt { optWsMode = parseWsMode arg })
+            "WHITESPACE_MODE")
+    "Whitespace mode (keep-all, keep-indent)"
+
+  , Option [] ["language"]
     (ReqArg (\arg opt -> return opt { optLanguage = Just (T.pack arg) })
             "LANGUAGE")
     "Programming language (restrict fenced code blocks)"
@@ -98,8 +112,8 @@ main = do
       when ookay $ do
 
         let istream = if ifile == "-" then T.getContents else T.readFile ifile
-        let ostream = if ofile == "-" then T.putStrLn else T.writeFile ofile
-        istream >>= ostream . unlit haskell
+        let ostream = if ofile == "-" then T.putStr      else T.writeFile ofile
+        istream >>= ostream . unlit KeepIndent haskell
         exitSuccess
 
 
@@ -110,13 +124,14 @@ main = do
               , optTargetStyle = ts
               , optInputFile   = istream
               , optOutputFile  = ostream
+              , optWsMode      = wsmode
               , optLanguage    = lang } = opts
 
   let ss' = maybe ss (\l -> forLang l ss) lang
   let ts' = maybe ts (\l -> forLang l ts) lang
 
   -- define unlit/relit
-  let run = if null ts then unlit ss' else relit ss' ts'
+  let run = if null ts then unlit wsmode ss' else relit ss' ts'
 
   -- run unlit/relit
   istream >>= ostream . run

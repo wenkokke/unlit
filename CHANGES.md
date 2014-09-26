@@ -1,3 +1,13 @@
+### Version 0.3.0.0
+
+- Added an argument to the program and to the `unlit` function which
+  determines its behaviour w.r.t. whitespace.
+
+### Version 0.2.0.2
+
+- Now exporting `infer` as an additional style option (passing in `[]`
+  for style inference will be deprecated in future releases).
+
 ### Version 0.2.0.1
 
 - Fixed bug with occurrences of Bird tags in other code blocks. The

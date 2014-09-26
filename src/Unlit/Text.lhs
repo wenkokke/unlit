@@ -1,18 +1,16 @@
 > {-# LANGUAGE GADTs, OverloadedStrings #-}
 > module Unlit.Text
 >        (unlit, relit
->        ,Style, all, latex, bird, haskell, markdown, tildefence, backtickfence
->        ,Lang, forLang) where
+>        ,Style, all, infer, latex, bird, haskell, markdown, tildefence, backtickfence
+>        ,Lang, forLang, WhitespaceMode(..)) where
 
 > import Prelude hiding (all, or, drop, dropWhile, takeWhile, length, lines, unlines, getContents, putStrLn)
 > import Control.Monad (msum)
 > import Data.Char (isSpace)
 > import Data.Maybe (maybe, maybeToList, listToMaybe, fromMaybe)
 > import Data.Monoid (mempty,(<>))
-> import Data.Text (Text)
-> import Data.Text (drop, dropWhile, takeWhile, length, lines, unlines, pack, unpack, isPrefixOf, isInfixOf)
+> import Data.Text (Text, drop, dropWhile, takeWhile, length, lines, unlines, pack, unpack, isPrefixOf, isInfixOf)
 > import Data.Text.IO (getContents, putStrLn)
-
 
 
 What are literate programs?
@@ -70,15 +68,12 @@ position (since we do not support indented code blocks).
 
 > isLaTeX :: Recogniser
 > isLaTeX l
->   | "\\begin{code}" `isPrefixOf` lstrip l = return $ LaTeX Begin
->   | "\\end{code}"   `isPrefixOf` lstrip l = return $ LaTeX End
+>   | "\\begin{code}" `isPrefixOf` stripStart l = return $ LaTeX Begin
+>   | "\\end{code}"   `isPrefixOf` stripStart l = return $ LaTeX End
 >   | otherwise = Nothing
 
-However, there is the optional feature of indented code blocks, for
-which we'll need to remember how many whitespaces to remove.
-
-> lstrip :: Text -> Text
-> lstrip = dropWhile isSpace
+> stripStart :: Text -> Text
+> stripStart = dropWhile isSpace
 
 In Bird-style, every line in a codeblock must start with a Bird tag.
 A tagged line is defined as *either* a line containing solely the
@@ -88,11 +83,15 @@ least one space.
 > isBird :: Recogniser
 > isBird l = (l == ">") || ("> " `isPrefixOf` l) ?: Bird
 
-Due to this definition, whenever we strip a bird tag, we also remove
-a the first space following it.
+Due to this definition, whenever we strip a bird tag, in normal
+whitespace modes we also remove a the first space following it.
 
 > stripBird :: Text -> Text
-> stripBird l = drop 2 l
+> stripBird = stripBird' KeepIndent
+
+> stripBird' :: WhitespaceMode -> Text -> Text
+> stripBird' KeepAll    l = " " <> drop 1 l
+> stripBird' KeepIndent l =        drop 2 l
 
 Lastly, Markdown supports two styles of fenced codeblocks: using
 tildes or using backticks. These fenced codeblocks have as a
@@ -105,7 +104,7 @@ well-formed Markdown.
 
 > isTildeFence :: Maybe Lang -> Recogniser
 > isTildeFence lang l =
->   if "~~~" `isPrefixOf` lstrip l then
+>   if "~~~" `isPrefixOf` stripStart l then
 >     (
 >       if maybe True (`isInfixOf` l) lang then
 >         return $ TildeFence lang
@@ -117,7 +116,7 @@ well-formed Markdown.
 
 > isBacktickFence :: Maybe Lang -> Recogniser
 > isBacktickFence lang l =
->   if "```" `isPrefixOf` lstrip l then
+>   if "```" `isPrefixOf` stripStart l then
 >     (
 >       if maybe True (`isInfixOf` l) lang then
 >         return $ TildeFence lang
@@ -193,6 +192,13 @@ it encounters a Bird-tag, will infer general Markdown-style.
 > doInfer (Just (LaTeX _)) = latex
 > doInfer (Just _)         = markdown
 
+Lastly, we would like `unlit` to be able to operate in several
+different whitespace modes. For now, these are:
+
+> data WhitespaceMode where
+>   KeepIndent :: WhitespaceMode -- ^ keeps only indentations
+>   KeepAll    :: WhitespaceMode -- ^ keeps all lines and whitespace
+
 We would like to combine the inferred style with current styles as
 one would combine maybe values using the alternative operator
 `(<|>)`. Therefore, we will define our own version of this operator.
@@ -205,8 +211,8 @@ one would combine maybe values using the alternative operator
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-> unlit :: [Delim] -> Text -> Text
-> unlit ss = unlines . unlit' ss Nothing 0 . zip [1..] . lines
+> unlit :: WhitespaceMode -> [Delim] -> Text -> Text
+> unlit ws ss = unlines . unlit' ws ss Nothing . zip [1..] . lines
 
 However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
@@ -214,39 +220,34 @@ of code block (if any) the automaton currently is in.
 
 > type State = Maybe Delim
 
-Additionally, for the optional feature of indented code blocks, we will
-have to be able to count the number of whitespaces to remove. This
-will be passed as the second additional argument.
-
-> countSpaces :: Text -> Int
-> countSpaces = length . takeWhile isSpace
-
 With this, the signature of `unlit'` becomes:
 
-> unlit' :: [Delim] -> State -> Int -> [(Int, Text)] -> [Text]
+> unlit' :: WhitespaceMode -> [Delim] -> State -> [(Int, Text)] -> [Text]
 > unlit' _ _ _ [] = []
-> unlit' ss q ws ((n, l):ls) = case (q, q') of
+> unlit' ws ss q ((n, l):ls) = case (q, q') of
 >
 >
->   (Nothing  , Nothing)          -> continue
->   (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
->   (Just Bird, Just Bird)        -> blockContinue $ stripBird l
->   (Just Bird, Nothing)          -> blockClose
->   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
->   (Nothing  , Just o)           -> blockOpen     $ Nothing
->   (Just o   , Nothing)          -> blockContinue $ l
->   (Just o   , Just Bird)        -> l : continue
->   (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
->
+>   (Nothing  , Nothing)          -> continue $ lineIfKeepAll
+>   (Nothing  , Just Bird)        -> open     $ return (stripBird' ws l)
+>   (Just Bird, Just Bird)        -> continue $ return (stripBird' ws l)
+>   (Just Bird, Nothing)          -> close    $ lineIfKeepAll
+>   (Nothing  , Just (LaTeX End)) -> spurious $ LaTeX End
+>   (Nothing  , Just o)           -> open     $ lineIfKeepAll <> lineIfKeepIndent
+>   (Just o   , Nothing)          -> continue $ return l
+>   (Just o   , Just Bird)        -> continue $ return l
+>   (Just o   , Just c)           -> if not (o `match` c) then
+>                                      spurious c
+>                                    else
+>                                      close $ lineIfKeepAll
 >   where
->     q'                = isDelim (ss `or` all) l
->     continueWith q ws = unlit' (ss `or` doInfer q') q ws ls
->     continue          = continueWith q ws
->     blockOpen       l = maybeToList l ++ continueWith q' ws
->     blockContinue   l = l : continue
->     blockClose        = mempty : continueWith Nothing ws
->     spurious        q = error ("at line " ++ show n ++ ": spurious " ++ show q)
-
+>     q'               = isDelim (ss `or` all) l
+>     continueWith q l = l ++ unlit' ws (ss `or` doInfer q') q ls
+>     open             = continueWith q'
+>     continue         = continueWith q
+>     close            = continueWith Nothing
+>     spurious       q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+>     lineIfKeepAll    = case ws of KeepAll    -> return mempty ; _ -> mempty
+>     lineIfKeepIndent = case ws of KeepIndent -> return mempty ; _ -> mempty
 
 
 
@@ -297,7 +298,7 @@ function.
 >
 >   (Nothing  , Nothing)          -> l : continue
 >   (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
->   (Just Bird, Just Bird)        -> blockContinue $ stripBird l
+>   (Just Bird, Just Bird)        -> blockContinue $       stripBird l
 >   (Just Bird, Nothing)          -> blockClose
 >   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
 >   (Nothing  , Just o)           -> blockOpen     $ Nothing
