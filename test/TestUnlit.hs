@@ -22,13 +22,16 @@ runGhcUnlit ifile = do
 
 runMyUnlit :: String -> IO String
 runMyUnlit ifile = do
-  (exitCode, stdout, stderr) <- readProcessWithExitCode myUnlit [ifile,"-"] ""
+  (exitCode, stdout, stderr) <- readProcessWithExitCode myUnlit ["--ws-mode=keep-all","-f","haskell","-i",ifile] ""
   case exitCode of
    ExitSuccess   -> return stdout
    ExitFailure n -> return stderr
 
 removeBlankLines :: [String] -> [String]
 removeBlankLines = filter (not . null)
+
+breakAndMark :: String -> [String]
+breakAndMark = zipWith (\n -> (show n ++)) [1..] . lines
 
 main :: IO ()
 main = do
@@ -40,15 +43,10 @@ main = do
       ghcResult <- runGhcUnlit (testdir </> file)
       myResult  <- runMyUnlit (testdir </> file)
 
-      let
-        ghcResult', myResult'  :: [String]
-        ghcResult' = removeBlankLines . lines $ ghcResult
-        myResult'  = removeBlankLines . lines $ myResult
-
       putStrLn $ "Testing file: " ++ file
-      unless (myResult' == ghcResult') $ do
+      unless (myResult == ghcResult) $ do
 
         hPutStrLn stderr $ "Error in file: " ++ file
-        hPutStrLn stderr $ ppDiff $ getGroupedDiff ghcResult' myResult'
+        hPutStrLn stderr $ ppDiff $ getGroupedDiff (breakAndMark ghcResult) (breakAndMark myResult)
 
   exitSuccess

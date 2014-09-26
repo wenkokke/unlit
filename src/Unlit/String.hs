@@ -1,8 +1,8 @@
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Unlit.String
        (unlit, relit
-       ,Style, all, latex, bird, haskell, markdown, tildefence, backtickfence
-       ,Lang, forLang) where
+       ,Style, all, infer, latex, bird, haskell, markdown, tildefence, backtickfence
+       ,Lang, forLang, WhitespaceMode(..)) where
 
 import Prelude hiding (all, or)
 import Data.List (isPrefixOf, isInfixOf)
@@ -42,22 +42,26 @@ False ?: _ = Nothing
 
 isLaTeX :: Recogniser
 isLaTeX l
-  | "\\begin{code}" `isPrefixOf` lstrip l = return $ LaTeX Begin
-  | "\\end{code}"   `isPrefixOf` lstrip l = return $ LaTeX End
+  | "\\begin{code}" `isPrefixOf` stripStart l = return $ LaTeX Begin
+  | "\\end{code}"   `isPrefixOf` stripStart l = return $ LaTeX End
   | otherwise = Nothing
 
-lstrip :: String -> String
-lstrip = dropWhile isSpace
+stripStart :: String -> String
+stripStart = dropWhile isSpace
 
 isBird :: Recogniser
 isBird l = (l == ">") || ("> " `isPrefixOf` l) ?: Bird
 
 stripBird :: String -> String
-stripBird l = drop 2 l
+stripBird = stripBird' KeepIndent
+
+stripBird' :: WhitespaceMode -> String -> String
+stripBird' KeepAll    l = " " <> drop 1 l
+stripBird' KeepIndent l =        drop 2 l
 
 isTildeFence :: Maybe Lang -> Recogniser
 isTildeFence lang l =
-  if "~~~" `isPrefixOf` lstrip l then
+  if "~~~" `isPrefixOf` stripStart l then
     (
       if maybe True (`isInfixOf` l) lang then
         return $ TildeFence lang
@@ -69,7 +73,7 @@ isTildeFence lang l =
 
 isBacktickFence :: Maybe Lang -> Recogniser
 isBacktickFence lang l =
-  if "```" `isPrefixOf` lstrip l then
+  if "```" `isPrefixOf` stripStart l then
     (
       if maybe True (`isInfixOf` l) lang then
         return $ TildeFence lang
@@ -118,42 +122,46 @@ doInfer  Nothing         = []
 doInfer (Just (LaTeX _)) = latex
 doInfer (Just _)         = markdown
 
+data WhitespaceMode where
+  KeepIndent :: WhitespaceMode -- ^ keeps only indentations
+  KeepAll    :: WhitespaceMode -- ^ keeps all lines and whitespace
+
 or :: [a] -> [a] -> [a]
 xs `or` [] = xs
 [] `or` ys = ys
 xs `or` ys = xs
 
-unlit :: [Delim] -> String -> String
-unlit ss = unlines . unlit' ss Nothing 0 . zip [1..] . lines
+unlit :: WhitespaceMode -> [Delim] -> String -> String
+unlit ws ss = unlines . unlit' ws ss Nothing . zip [1..] . lines
 
 type State = Maybe Delim
 
-countSpaces :: String -> Int
-countSpaces = length . takeWhile isSpace
-
-unlit' :: [Delim] -> State -> Int -> [(Int, String)] -> [String]
+unlit' :: WhitespaceMode -> [Delim] -> State -> [(Int, String)] -> [String]
 unlit' _ _ _ [] = []
-unlit' ss q ws ((n, l):ls) = case (q, q') of
+unlit' ws ss q ((n, l):ls) = case (q, q') of
 
 
-  (Nothing  , Nothing)          -> continue
-  (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
-  (Just Bird, Just Bird)        -> blockContinue $ stripBird l
-  (Just Bird, Nothing)          -> blockClose
-  (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
-  (Nothing  , Just o)           -> blockOpen     $ Nothing
-  (Just o   , Nothing)          -> blockContinue $ l
-  (Just o   , Just Bird)        -> l : continue
-  (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
-
+  (Nothing  , Nothing)          -> continue $ lineIfKeepAll
+  (Nothing  , Just Bird)        -> open     $ return (stripBird' ws l)
+  (Just Bird, Just Bird)        -> continue $ return (stripBird' ws l)
+  (Just Bird, Nothing)          -> close    $ lineIfKeepAll
+  (Nothing  , Just (LaTeX End)) -> spurious $ LaTeX End
+  (Nothing  , Just o)           -> open     $ lineIfKeepAll <> lineIfKeepIndent
+  (Just o   , Nothing)          -> continue $ return l
+  (Just o   , Just Bird)        -> continue $ return l
+  (Just o   , Just c)           -> if not (o `match` c) then
+                                     spurious c
+                                   else
+                                     close $ lineIfKeepAll
   where
-    q'                = isDelim (ss `or` all) l
-    continueWith q ws = unlit' (ss `or` doInfer q') q ws ls
-    continue          = continueWith q ws
-    blockOpen       l = maybeToList l ++ continueWith q' ws
-    blockContinue   l = l : continue
-    blockClose        = mempty : continueWith Nothing ws
-    spurious        q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+    q'               = isDelim (ss `or` all) l
+    continueWith q l = l ++ unlit' ws (ss `or` doInfer q') q ls
+    open             = continueWith q'
+    continue         = continueWith q
+    close            = continueWith Nothing
+    spurious       q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+    lineIfKeepAll    = case ws of KeepAll    -> return mempty ; _ -> mempty
+    lineIfKeepIndent = case ws of KeepIndent -> return mempty ; _ -> mempty
 
 relit :: Style -> Style -> String -> String
 relit ss ts = unlines . relit' ss (head ts) Nothing . zip [1..] . lines
@@ -183,7 +191,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)          -> l : continue
   (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
-  (Just Bird, Just Bird)        -> blockContinue $ stripBird l
+  (Just Bird, Just Bird)        -> blockContinue $       stripBird l
   (Just Bird, Nothing)          -> blockClose
   (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
   (Nothing  , Just o)           -> blockOpen     $ Nothing
