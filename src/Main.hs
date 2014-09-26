@@ -125,7 +125,8 @@ main = do
               , optInputFile   = istream
               , optOutputFile  = ostream
               , optWsMode      = wsmode
-              , optLanguage    = lang } = opts
+              , optLanguage    = lang
+              } = opts
 
   let ss' = maybe ss (\l -> forLang l ss) lang
   let ts' = maybe ts (\l -> forLang l ts) lang

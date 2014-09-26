@@ -44,7 +44,7 @@ main = do
       myResult  <- runMyUnlit (testdir </> file)
 
       putStrLn $ "Testing file: " ++ file
-      unless (myResult == ghcResult) $ do
+      unless (myResult == ghcResult ++ "\n") $ do
 
         hPutStrLn stderr $ "Error in file: " ++ file
         hPutStrLn stderr $ ppDiff $ getGroupedDiff (breakAndMark ghcResult) (breakAndMark myResult)
