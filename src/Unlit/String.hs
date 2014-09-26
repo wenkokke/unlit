@@ -1,15 +1,17 @@
+
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Unlit.String
        (unlit, relit
        ,Style, all, infer, latex, bird, haskell, markdown, tildefence, backtickfence
        ,Lang, forLang, WhitespaceMode(..)) where
-
 import Prelude hiding (all, or)
 import Data.List (isPrefixOf, isInfixOf)
+import Prelude hiding (all, or, replicate, drop, dropWhile, takeWhile, length, lines, unlines, getContents, putStrLn)
 import Control.Monad (msum)
 import Data.Char (isSpace)
 import Data.Maybe (maybe, maybeToList, listToMaybe, fromMaybe)
 import Data.Monoid (mempty,(<>))
+import Data.String (IsString(..))
 
 data Delim where
   LaTeX         :: BeginEnd -> Delim
@@ -142,11 +144,11 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
 
 
   (Nothing  , Nothing)          -> continue $ lineIfKeepAll
-  (Nothing  , Just Bird)        -> open     $ return (stripBird' ws l)
-  (Just Bird, Just Bird)        -> continue $ return (stripBird' ws l)
+  (Nothing  , Just Bird)        -> open     $ lineIfKeepIndent ++ [stripBird' ws l]
+  (Just Bird, Just Bird)        -> continue $                     [stripBird' ws l]
   (Just Bird, Nothing)          -> close    $ lineIfKeepAll
   (Nothing  , Just (LaTeX End)) -> spurious $ LaTeX End
-  (Nothing  , Just o)           -> open     $ lineIfKeepAll <> lineIfKeepIndent
+  (Nothing  , Just o)           -> open     $ lineIfKeepAll ++ lineIfKeepIndent
   (Just o   , Nothing)          -> continue $ return l
   (Just o   , Just Bird)        -> continue $ return l
   (Just o   , Just c)           -> if not (o `match` c) then
@@ -160,6 +162,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     continue         = continueWith q
     close            = continueWith Nothing
     spurious       q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+    lineIfKeepAll, lineIfKeepIndent :: [String]
     lineIfKeepAll    = case ws of KeepAll    -> return mempty ; _ -> mempty
     lineIfKeepIndent = case ws of KeepIndent -> return mempty ; _ -> mempty
 
