@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/pepijnkokke/unlit.png?branch=master)](https://travis-ci.org/pepijnkokke/unlit)
 ```
-{-# LANGUAGE GADTs, OverloadedStrings #-}
+{-# LANGUAGE GADTs, OverloadedStrings, CPP #-}
 module Unlit.Text
        (unlit, relit
        ,Style, all, infer, latex, bird, haskell, markdown, tildefence, backtickfence
@@ -11,7 +11,7 @@ import Prelude hiding (all, or, replicate, drop, dropWhile, takeWhile, length, l
 import Control.Monad (msum)
 import Data.Char (isSpace)
 import Data.Maybe (maybe, maybeToList, listToMaybe, fromMaybe)
-import Data.Monoid (mempty,(<>))
+import Data.Monoid (mempty,mappend)
 import Data.String (IsString(..))
 import Data.Text (Text, replicate, drop, dropWhile, takeWhile, length, lines, unlines, pack, unpack, isPrefixOf, isInfixOf)
 import Data.Text.IO (getContents, putStrLn)
@@ -105,7 +105,7 @@ stripBird = stripBird' KeepIndent
 ```
 ```
 stripBird' :: WhitespaceMode -> Text -> Text
-stripBird' KeepAll    l = " " <> drop 1 l
+stripBird' KeepAll    l = " " `mappend` drop 1 l
 stripBird' KeepIndent l =        drop 2 l
 ```
 Lastly, Markdown supports two styles of fenced codeblocks: using
@@ -303,7 +303,7 @@ this purpose we will define a triple of functions.
 
 ```
 emitBird :: Text -> Text
-emitBird l = "> " <> l
+emitBird l = "> " `mappend` l
 
 emitOpen :: Delim -> Maybe Text -> [Text]
 emitOpen  Bird       l = mempty : map emitBird (maybeToList l)

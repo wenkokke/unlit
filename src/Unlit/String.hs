@@ -1,5 +1,5 @@
 
-{-# LANGUAGE GADTs, OverloadedStrings #-}
+{-# LANGUAGE GADTs, OverloadedStrings, CPP #-}
 module Unlit.String
        (unlit, relit
        ,Style, all, infer, latex, bird, haskell, markdown, tildefence, backtickfence
@@ -10,7 +10,7 @@ import Prelude hiding (all, or, replicate, drop, dropWhile, takeWhile, length, l
 import Control.Monad (msum)
 import Data.Char (isSpace)
 import Data.Maybe (maybe, maybeToList, listToMaybe, fromMaybe)
-import Data.Monoid (mempty,(<>))
+import Data.Monoid (mempty,mappend)
 import Data.String (IsString(..))
 
 data Delim where
@@ -58,7 +58,7 @@ stripBird :: String -> String
 stripBird = stripBird' KeepIndent
 
 stripBird' :: WhitespaceMode -> String -> String
-stripBird' KeepAll    l = " " <> drop 1 l
+stripBird' KeepAll    l = " " `mappend` drop 1 l
 stripBird' KeepIndent l =        drop 2 l
 
 isTildeFence :: Maybe Lang -> Recogniser
@@ -170,7 +170,7 @@ relit :: Style -> Style -> String -> String
 relit ss ts = unlines . relit' ss (head ts) Nothing . zip [1..] . lines
 
 emitBird :: String -> String
-emitBird l = "> " <> l
+emitBird l = "> " `mappend` l
 
 emitOpen :: Delim -> Maybe String -> [String]
 emitOpen  Bird       l = mempty : map emitBird (maybeToList l)
