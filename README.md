@@ -27,6 +27,7 @@ blocks.
 ```
 data Delim where
   LaTeX         :: BeginEnd -> Delim
+  OrgMode       :: BeginEnd -> Maybe Lang -> Delim
   Bird          :: Delim
   TildeFence    :: Maybe Lang -> Delim
   BacktickFence :: Maybe Lang -> Delim
@@ -55,22 +56,17 @@ following instance.
 instance Show Delim where
   show (LaTeX Begin)     = "\\begin{code}"
   show (LaTeX End)       = "\\end{code}"
+  show (OrgMode Begin l) = "#+BEGIN_SRC" >#< maybe "" unpack l
+  show (OrgMode End _)   = "#+END_SRC"
   show  Bird             = ">"
-  show (TildeFence l)    = "~~~" ++ (maybe "" unpack l)
-  show (BacktickFence l) = "```" ++ (maybe "" unpack l)
+  show (TildeFence l)    = "~~~" >#< maybe "" unpack l
+  show (BacktickFence l) = "```" >#< maybe "" unpack l
 ```
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
 
 ```
 type Recogniser = Text -> Maybe Delim
-```
-```
-infix 1 ?:
-
-(?:) :: Bool -> a -> Maybe a
-True  ?: x = Just x
-False ?: _ = Nothing
 ```
 For instance, in LaTeX-style, a codeblock is delimited by
 `\begin{code}` and `\end{code}` tags, which must appear at the first
@@ -81,6 +77,14 @@ isLaTeX :: Recogniser
 isLaTeX l
   | "\\begin{code}" `isPrefixOf` stripStart l = return $ LaTeX Begin
   | "\\end{code}"   `isPrefixOf` stripStart l = return $ LaTeX End
+  | otherwise = Nothing
+```
+```
+isOrgMode :: Maybe Lang -> Recogniser
+isOrgMode lang l
+  | "#+BEGIN_SRC" `isPrefixOf` stripStart l
+    && maybe True (`isInfixOf` l) lang       = return $ OrgMode Begin lang
+  | "#+END_SRC"   `isPrefixOf` stripStart l = return $ OrgMode End Nothing
   | otherwise = Nothing
 ```
 ```
@@ -155,6 +159,7 @@ isDelim ds l = msum (map go ds)
     go  Bird                = isBird l
     go (TildeFence lang)    = isTildeFence lang l
     go (BacktickFence lang) = isBacktickFence lang l
+    go (OrgMode _ lang)     = isOrgMode lang l
 ```
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
@@ -162,6 +167,7 @@ need a function that checks if these pairs match.
 ```
 match :: Delim -> Delim -> Bool
 match (LaTeX Begin)     (LaTeX End)             = True
+match (OrgMode Begin _) (OrgMode End _)         = True
 match (TildeFence _)    (TildeFence Nothing)    = True
 match (BacktickFence _) (BacktickFence Nothing) = True
 match  _                 _                      = False
@@ -187,6 +193,7 @@ type Style = [Delim]
 
 bird             = [Bird]
 latex            = [LaTeX Begin, LaTeX End]
+orgmode          = [OrgMode Begin Nothing, OrgMode End Nothing]
 haskell          = latex ++ bird
 tildefence       = [TildeFence Nothing]
 backtickfence    = [BacktickFence Nothing]
@@ -200,9 +207,10 @@ forLang l = map (setLang (Just l))
 ```
 ```
 setLang :: Maybe Lang -> Delim -> Delim
-setLang l (TildeFence _)    = TildeFence l
-setLang l (BacktickFence _) = BacktickFence l
-setLang _  d                = d
+setLang lang (TildeFence _)       = TildeFence lang
+setLang lang (BacktickFence _)    = BacktickFence lang
+setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
+setLang _     d                   = d
 ```
 Additionally, when the source style is empty, the program will
 attempt to guess the style based on the first delimiter it
@@ -211,9 +219,10 @@ it encounters a Bird-tag, will infer general Markdown-style.
 
 ```
 doInfer :: Maybe Delim -> [Delim]
-doInfer  Nothing         = []
-doInfer (Just (LaTeX _)) = latex
-doInfer (Just _)         = markdown
+doInfer  Nothing             = []
+doInfer (Just (LaTeX _))     = latex
+doInfer (Just (OrgMode _ _)) = orgmode
+doInfer (Just _)             = markdown
 ```
 Lastly, we would like `unlit` to be able to operate in several
 different whitespace modes. For now, these are:
@@ -255,18 +264,19 @@ unlit' _ _ _ [] = []
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
 
-  (Nothing  , Nothing)          -> continue $ lineIfKeepAll
-  (Nothing  , Just Bird)        -> open     $ lineIfKeepIndent ++ [stripBird' ws l]
-  (Just Bird, Just Bird)        -> continue $                     [stripBird' ws l]
-  (Just Bird, Nothing)          -> close    $ lineIfKeepAll
-  (Nothing  , Just (LaTeX End)) -> spurious $ LaTeX End
-  (Nothing  , Just o)           -> open     $ lineIfKeepAll ++ lineIfKeepIndent
-  (Just o   , Nothing)          -> continue $ return l
-  (Just o   , Just Bird)        -> continue $ return l
-  (Just o   , Just c)           -> if not (o `match` c) then
-                                     spurious c
-                                   else
-                                     close $ lineIfKeepAll
+  (Nothing  , Nothing)                 -> continue $ lineIfKeepAll
+  (Nothing  , Just Bird)               -> open     $ lineIfKeepIndent ++ [stripBird' ws l]
+  (Just Bird, Just Bird)               -> continue $                     [stripBird' ws l]
+  (Just Bird, Nothing)                 -> close    $ lineIfKeepAll
+  (Nothing  , Just (LaTeX End))        -> spurious $ LaTeX End
+  (Nothing  , Just (OrgMode End lang)) -> spurious $ OrgMode End lang
+  (Nothing  , Just o)                  -> open     $ lineIfKeepAll ++ lineIfKeepIndent
+  (Just o   , Nothing)                 -> continue $ return l
+  (Just o   , Just Bird)               -> continue $ return l
+  (Just o   , Just c)                  -> if not (o `match` c) then
+                                       spurious c
+                                     else
+                                       close $ lineIfKeepAll
   where
     q'               = isDelim (ss `or` all) l
     continueWith q l = l ++ unlit' ws (ss `or` doInfer q') q ls
@@ -301,23 +311,30 @@ automaton, which remembers the current state. However, we now also
 need a function which can emit code blocks in a certain style. For
 this purpose we will define a triple of functions.
 
+TODO: Currently, if a delimiter is indented, running `relit` will remove this
+      indentation. This is obviously an error, however changing it would require
+      adding indentation information to all delimiters (which I'll do in the
+      future, together with making a general `isEnd` predicate).
+
 ```
 emitBird :: Text -> Text
 emitBird l = "> " `mappend` l
 
 emitOpen :: Delim -> Maybe Text -> [Text]
-emitOpen  Bird       l = mempty : map emitBird (maybeToList l)
-emitOpen (LaTeX End) l = emitOpen (LaTeX Begin) l
-emitOpen  del        l = pack (show del) : maybeToList l
+emitOpen  Bird              l = mempty : map emitBird (maybeToList l)
+emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
+emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
+emitOpen  del               l = pack (show del) : maybeToList l
 
 emitCode :: Delim -> Text -> Text
 emitCode Bird l = emitBird l
 emitCode _    l = l
 
 emitClose :: Delim -> Text
-emitClose  Bird         = mempty
-emitClose (LaTeX Begin) = emitClose (LaTeX End)
-emitClose  del          = pack (show (setLang Nothing del))
+emitClose  Bird                = mempty
+emitClose (LaTeX Begin)        = emitClose (LaTeX End)
+emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
+emitClose  del                 = pack (show (setLang Nothing del))
 ```
 Using these simple functions we can easily define the `relit'`
 function.
@@ -329,15 +346,16 @@ relit' _ ts (Just Bird) [] = emitClose ts : []
 relit' _ _  (Just o)    [] = error ("unexpected EOF; unmatched " ++ show o)
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)          -> l : continue
-  (Nothing  , Just Bird)        -> blockOpen     $ Just (stripBird l)
-  (Just Bird, Just Bird)        -> blockContinue $       stripBird l
-  (Just Bird, Nothing)          -> blockClose
-  (Nothing  , Just (LaTeX End)) -> spurious (LaTeX End)
-  (Nothing  , Just o)           -> blockOpen     $ Nothing
-  (Just o   , Nothing)          -> blockContinue $ l
-  (Just o   , Just Bird)        -> l : continue
-  (Just o   , Just c)           -> if o `match` c then blockClose else spurious c
+  (Nothing  , Nothing)                 -> l : continue
+  (Nothing  , Just Bird)               -> blockOpen     $ Just (stripBird l)
+  (Just Bird, Just Bird)               -> blockContinue $       stripBird l
+  (Just Bird, Nothing)                 -> blockClose
+  (Nothing  , Just (LaTeX End))        -> spurious (LaTeX End)
+  (Nothing  , Just (OrgMode End lang)) -> spurious (OrgMode End lang)
+  (Nothing  , Just o)                  -> blockOpen     $ Nothing
+  (Just o   , Nothing)                 -> blockContinue $ l
+  (Just o   , Just Bird)               -> l : continue
+  (Just o   , Just c)                  -> if o `match` c then blockClose else spurious c
 
   where
     q'              = isDelim (ss `or` all) l
@@ -347,5 +365,23 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     blockContinue l = emitCode  ts l : continue
     blockClose      = emitClose ts   : continueWith Nothing
     spurious      q = error ("at line " ++ show n ++ ": spurious " ++ show q)
+```
+Helper functions
+================
+
+```
+infixr 1 ?:
+infixr 5 >#<
+```
+```
+(?:) :: Bool -> a -> Maybe a
+True  ?: x = Just x
+False ?: _ = Nothing
+```
+```
+(>#<) :: String -> String -> String
+"" >#< y  = y
+x  >#< "" = x
+x  >#< y  = x ++ " " ++ y
 ```
 
