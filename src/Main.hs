@@ -20,6 +20,7 @@ parseStyle :: String -> Style
 parseStyle arg = case map toLower arg of
   "all"           -> all
   "bird"          -> bird
+  "jekyll"        -> jekyll
   "haskell"       -> haskell
   "latex"         -> latex
   "markdown"      -> markdown
@@ -34,6 +35,7 @@ data Options = Options
   , optInputFile   :: IO Text
   , optOutputFile  :: Text -> IO ()
   , optWsMode      :: WhitespaceMode
+  , optGhc         :: Bool
   , optLanguage    :: Maybe Lang
   }
 
@@ -44,6 +46,7 @@ defaultOptions = Options
   , optInputFile   = T.getContents
   , optOutputFile  = T.putStrLn
   , optWsMode      = KeepIndent
+  , optGhc         = False
   , optLanguage    = Nothing
   }
 
@@ -57,7 +60,7 @@ options =
   [ Option "f" ["from"]
     (ReqArg (\arg opt -> return opt { optSourceStyle = (optSourceStyle opt) ++ (parseStyle arg) })
             "STYLE_NAME")
-    "Source style (all, bird, haskell, latex, markdown, tildefence, backtickfence)"
+    "Source style (all, bird, jekyll, haskell, latex, markdown, tildefence, backtickfence)"
   , Option "t" ["to"]
     (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle arg })
             "STYLE_NAME")
@@ -72,6 +75,10 @@ options =
             "FILE")
     "Output file (optional)"
 
+  , Option [] ["ghc"]
+    (NoArg (\opt -> return opt { optGhc = True }))
+    "Follow GHC calling conventions"
+
   , Option [] ["ws-mode"]
     (ReqArg (\arg opt -> return opt { optWsMode = parseWsMode arg })
             "WHITESPACE_MODE")
@@ -82,10 +89,12 @@ options =
             "LANGUAGE")
     "Programming language (restrict fenced code blocks)"
 
-  , Option "h" ["help"]
+  , Option [] ["help"]
     (NoArg  (\_ -> do
     	      prg <- getProgName
               hPutStrLn stderr (usageInfo prg options)
+              args <- getArgs
+              print args
               exitSuccess))
     "Show help"
 
@@ -100,24 +109,7 @@ main :: IO ()
 main = do
   args <- getArgs
 
-  -- compatibility with GHC calling conventions
-  when (length args == 2) $ do
-    let ifile = args !! 0
-    let ofile = args !! 1
-
-    iokay <- fmap (ifile == "-" ||) (doesFileExist ifile)
-    when iokay $ do
-
-      ookay <- fmap (ofile == "-" ||) (doesFileExist ofile)
-      when ookay $ do
-
-        let istream = if ifile == "-" then T.getContents else T.readFile ifile
-        let ostream = if ofile == "-" then T.putStr      else T.writeFile ofile
-        istream >>= ostream . unlit KeepIndent haskell
-        exitSuccess
-
-
-  -- otherwise use my own calling conventions
+  -- use my own calling conventions
   let (actions, nonOptions, errors) = getOpt Permute options args
   opts <- foldl (>>=) (return defaultOptions) actions
   let Options { optSourceStyle = ss
@@ -125,8 +117,12 @@ main = do
               , optInputFile   = istream
               , optOutputFile  = ostream
               , optWsMode      = wsmode
+              , optGhc         = ghc
               , optLanguage    = lang
               } = opts
+
+  let istream' = if ghc then T.readFile  (nonOptions !! 1) else istream
+  let ostream' = if ghc then T.writeFile (nonOptions !! 2) else ostream
 
   let ss' = maybe ss (\l -> forLang l ss) lang
   let ts' = maybe ts (\l -> forLang l ts) lang
@@ -135,4 +131,4 @@ main = do
   let run = if null ts then unlit wsmode ss' else relit ss' ts'
 
   -- run unlit/relit
-  istream >>= ostream . run
+  istream' >>= ostream' . run
