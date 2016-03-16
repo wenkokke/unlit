@@ -30,7 +30,7 @@ src/Unlit/String.hs: src/Unlit/Text.lhs
 	| gsed '7d;14d;15d'                                                 \
 	| gsed 's/Text/String/g;s/unpack/id/g;s/pack/id/g'                  \
 	| gsed '7i import Prelude hiding \(all, or\)'                       \
-	| gsed '8i import Data.List \(isPrefixOf, isInfixOf\)'              \
+	| gsed '8i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
 	> src/Unlit/String.hs
 
 .PHONY: test dist build install

@@ -2,11 +2,11 @@
 {-# LANGUAGE GADTs, OverloadedStrings, CPP #-}
 module Unlit.String
        (unlit, relit
-       ,Style, all, infer, latex, bird, haskell, markdown, tildefence, backtickfence
+       ,Style, all, infer, latex, bird, jekyll, haskell, markdown, tildefence, backtickfence
        ,Lang, forLang, WhitespaceMode(..)) where
 import Prelude hiding (all, or)
-import Data.List (isPrefixOf, isInfixOf)
-import Prelude hiding (all, or, replicate, drop, dropWhile, takeWhile, length, lines, unlines, getContents, putStrLn)
+import Data.List (isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd)
+import Prelude hiding (all, or, replicate, drop, dropWhile, takeWhile, length, lines, unlines, getContents, putStrLn, reverse)
 import Control.Monad (msum)
 import Data.Char (isSpace)
 import Data.Maybe (maybe, maybeToList, listToMaybe, fromMaybe)
@@ -17,6 +17,7 @@ data Delim where
   LaTeX         :: BeginEnd -> Delim
   OrgMode       :: BeginEnd -> Maybe Lang -> Delim
   Bird          :: Delim
+  Jekyll        :: BeginEnd -> Maybe Lang -> Delim
   TildeFence    :: Maybe Lang -> Delim
   BacktickFence :: Maybe Lang -> Delim
   deriving (Eq)
@@ -34,6 +35,8 @@ instance Show Delim where
   show (OrgMode Begin l) = "#+BEGIN_SRC" >#< maybe "" id l
   show (OrgMode End _)   = "#+END_SRC"
   show  Bird             = ">"
+  show (Jekyll Begin l)  = "{% highlight " >#< maybe "" id l >#< " %}"
+  show (Jekyll End   _)  = "{% endhighlight %}"
   show (TildeFence l)    = "~~~" >#< maybe "" id l
   show (BacktickFence l) = "```" >#< maybe "" id l
 
@@ -48,12 +51,13 @@ isLaTeX l
 isOrgMode :: Maybe Lang -> Recogniser
 isOrgMode lang l
   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
-    && maybe True (`isInfixOf` l) lang       = return $ OrgMode Begin lang
+    && maybe True (`isInfixOf` l) lang      = return $ OrgMode Begin lang
   | "#+END_SRC"   `isPrefixOf` stripStart l = return $ OrgMode End Nothing
   | otherwise = Nothing
 
-stripStart :: String -> String
+stripStart, stripEnd :: String -> String
 stripStart = dropWhile isSpace
+stripEnd   = dropWhileEnd isSpace
 
 isBird :: Recogniser
 isBird l = (l == ">") || ("> " `isPrefixOf` l) ?: Bird
@@ -64,6 +68,14 @@ stripBird = stripBird' KeepIndent
 stripBird' :: WhitespaceMode -> String -> String
 stripBird' KeepAll    l = " " `mappend` drop 1 l
 stripBird' KeepIndent l =        drop 2 l
+
+isJekyll :: Maybe Lang -> Recogniser
+isJekyll lang l
+  | "{% highlight" `isPrefixOf` stripStart l
+    && maybe True (`isInfixOf` l) lang
+    && "%}"        `isSuffixOf` stripEnd l = return $ Jekyll Begin lang
+  | "{% endhighlight %}" `isPrefixOf` l    = return $ Jekyll End   lang
+  | otherwise                              = Nothing
 
 isTildeFence :: Maybe Lang -> Recogniser
 isTildeFence lang l =
@@ -95,6 +107,7 @@ isDelim ds l = msum (map go ds)
     go :: Delim -> Maybe Delim
     go (LaTeX _)            = isLaTeX l
     go  Bird                = isBird l
+    go (Jekyll _ lang)      = isJekyll lang l
     go (TildeFence lang)    = isTildeFence lang l
     go (BacktickFence lang) = isBacktickFence lang l
     go (OrgMode _ lang)     = isOrgMode lang l
@@ -112,6 +125,7 @@ bird             = [Bird]
 latex            = [LaTeX Begin, LaTeX End]
 orgmode          = [OrgMode Begin Nothing, OrgMode End Nothing]
 haskell          = latex ++ bird
+jekyll           = [Jekyll Begin Nothing, Jekyll End Nothing]
 tildefence       = [TildeFence Nothing]
 backtickfence    = [BacktickFence Nothing]
 markdown         = bird ++ tildefence ++ backtickfence
@@ -125,11 +139,13 @@ setLang :: Maybe Lang -> Delim -> Delim
 setLang lang (TildeFence _)       = TildeFence lang
 setLang lang (BacktickFence _)    = BacktickFence lang
 setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
+setLang lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
 setLang _     d                   = d
 
 doInfer :: Maybe Delim -> [Delim]
 doInfer  Nothing             = []
 doInfer (Just (LaTeX _))     = latex
+doInfer (Just (Jekyll _ _))  = jekyll
 doInfer (Just (OrgMode _ _)) = orgmode
 doInfer (Just _)             = markdown
 
@@ -157,6 +173,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
   (Just Bird, Just Bird)               -> continue $                     [stripBird' ws l]
   (Just Bird, Nothing)                 -> close    $ lineIfKeepAll
   (Nothing  , Just (LaTeX End))        -> spurious $ LaTeX End
+  (Nothing  , Just (Jekyll End lang))  -> spurious $ Jekyll End lang
   (Nothing  , Just (OrgMode End lang)) -> spurious $ OrgMode End lang
   (Nothing  , Just o)                  -> open     $ lineIfKeepAll ++ lineIfKeepIndent
   (Just o   , Nothing)                 -> continue $ return l
@@ -185,6 +202,7 @@ emitBird l = "> " `mappend` l
 emitOpen :: Delim -> Maybe String -> [String]
 emitOpen  Bird              l = mempty : map emitBird (maybeToList l)
 emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
+emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
 emitOpen  del               l = id (show del) : maybeToList l
 
@@ -195,6 +213,7 @@ emitCode _    l = l
 emitClose :: Delim -> String
 emitClose  Bird                = mempty
 emitClose (LaTeX Begin)        = emitClose (LaTeX End)
+emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
 emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
 emitClose  del                 = id (show (setLang Nothing del))
 
@@ -209,6 +228,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Just Bird, Just Bird)               -> blockContinue $       stripBird l
   (Just Bird, Nothing)                 -> blockClose
   (Nothing  , Just (LaTeX End))        -> spurious (LaTeX End)
+  (Nothing  , Just (Jekyll End lang))  -> spurious (Jekyll End lang)
   (Nothing  , Just (OrgMode End lang)) -> spurious (OrgMode End lang)
   (Nothing  , Just o)                  -> blockOpen     $ Nothing
   (Just o   , Nothing)                 -> blockContinue $ l
