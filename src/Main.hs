@@ -34,7 +34,7 @@ data Options = Options
   , optOutputFile  :: Text -> IO ()
   , optWsMode      :: WhitespaceMode
   , optGhc         :: Bool
-  , optLanguage    :: Maybe Lang
+  , optLanguage    :: Lang
   }
 
 defaultOptions :: Options
@@ -122,8 +122,8 @@ main = do
   let istream' = if ghc then T.readFile  (nonOptions !! 1) else istream
   let ostream' = if ghc then T.writeFile (nonOptions !! 2) else ostream
 
-  let ss' = maybe ss (\l -> forLang l ss) lang
-  let ts' = maybe ts (\l -> forLang l ts) lang
+  let ss' = forLang lang ss
+  let ts' = forLang lang ts
 
   -- define unlit/relit
   let run = either (error . unpack . showError) id . if null ts then unlit wsmode ss' else relit ss' ts'
