@@ -22,19 +22,19 @@ README.md: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs \
 	| unlit --language haskell -t backtickfence -l haskell \
 	| sed '1i [![Build Status](https://travis-ci.org/pepijnkokke/unlit.png?branch=master)](https://travis-ci.org/pepijnkokke/unlit)' \
-        > README.md
+	> README.md
 
 src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
-	cat src/Unlit/Text.lhs                                              \
-	| unlit -f bird -t code                                             \
-	| sed '1d;2d;15d;16d'                                                     \
-	| sed 's/Text/String/g;s/pack//g'   							                  \
-	| sed '13i import Prelude hiding \(all, or\)'                        \
+	cat src/Unlit/Text.lhs                                                            \
+	| unlit -f bird -t code                                                           \
+	| sed '1d;2d;15d;16d'                                                             \
+	| sed 's/Text/String/g;s/pack//g'                                                 \
+	| sed '13i import Prelude hiding \(all, or\)'                                     \
 	| sed '14i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
-	| sed '15i import Data.Char \(isSpace\)'                      \
-	| sed '16i stripStart, stripEnd :: String -> String'  				\
-	| sed '17i stripStart = dropWhile isSpace'  									\
-  | sed '18i stripEnd = dropWhileEnd isSpace'										\
+	| sed '15i import Data.Char \(isSpace\)\n'                                        \
+	| sed '17i stripStart, stripEnd :: String -> String'                              \
+	| sed '18i stripStart = dropWhile isSpace'                                        \
+	| sed '19i stripEnd = dropWhileEnd isSpace'                                       \
 	> src/Unlit/String.hs
 
 .PHONY: test dist build install
