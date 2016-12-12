@@ -13,6 +13,7 @@ import Data.Monoid ((<>))
 import Prelude hiding (all, or)
 import Data.List (isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd)
 import Data.Char (isSpace)
+
 stripStart, stripEnd :: String -> String
 stripStart = dropWhile isSpace
 stripEnd = dropWhileEnd isSpace
