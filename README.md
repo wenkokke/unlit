@@ -1,5 +1,5 @@
 [![Build Status](https://travis-ci.org/pepijnkokke/unlit.png?branch=master)](https://travis-ci.org/pepijnkokke/unlit)
-```
+``` haskell
 {-# LANGUAGE OverloadedStrings, CPP #-}
 module Unlit.Text (
   unlit, relit
@@ -8,7 +8,7 @@ module Unlit.Text (
   , Error(..), showError
 ) where
 ```
-```
+``` haskell
 import Data.Functor ((<$>))
 import Data.Foldable (asum)
 import Data.Bool (bool)
@@ -24,7 +24,7 @@ There are several styles of literate programming. Most commonly,
 these are LaTeX-style code tags, Bird tags and Markdown fenced code
 blocks.
 
-```
+``` haskell
 data Delimiter
   = LaTeX         BeginEnd
   | OrgMode       BeginEnd (Maybe Lang)
@@ -37,7 +37,7 @@ data Delimiter
 Some of these code blocks need to  carry around additional information.
 For instance, LaTex code blocks use distinct opening and closing tags.
 
-```
+``` haskell
 data BeginEnd
   = Begin
   | End
@@ -47,13 +47,13 @@ On the other hand, Markdown-style fenced code blocks can be annotated
 with all sorts of information. Most prominently, their programming
 language.
 
-```
+``` haskell
 type Lang = Text
 ```
 In order to properly show these code blocks, we will define the
 following instance.
 
-```
+``` haskell
 emitDelimiter :: Delimiter -> Text
 emitDelimiter (LaTeX Begin)     = "\\begin{code}"
 emitDelimiter (LaTeX End)       = "\\end{code}"
@@ -68,21 +68,21 @@ emitDelimiter (BacktickFence l) = "```" >#< fromMaybe "" l
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
 
-```
+``` haskell
 type Recogniser = Text -> Maybe Delimiter
 ```
 For instance, in LaTeX-style, a codeblock is delimited by
 `\begin{code}` and `\end{code}` tags, which must appear at the first
 position (since we do not support indented code blocks).
 
-```
+``` haskell
 isLaTeX :: Recogniser
 isLaTeX l
   | "\\begin{code}" `isPrefixOf` stripStart l = Just $ LaTeX Begin
   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
   | otherwise = Nothing
 ```
-```
+``` haskell
 isOrgMode :: Maybe Lang -> Recogniser
 isOrgMode lang l
   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
@@ -95,25 +95,25 @@ A tagged line is defined as *either* a line containing solely the
 symbol '>', or a line starting with the symbol '>' followed by at
 least one space.
 
-```
+``` haskell
 isBird :: Recogniser
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 ```
 Due to this definition, whenever we strip a bird tag, in normal
 whitespace modes we also remove a the first space following it.
 
-```
+``` haskell
 stripBird :: Text -> Text
 stripBird = stripBird' KeepIndent
 ```
-```
+``` haskell
 stripBird' :: WhitespaceMode -> Text -> Text
 stripBird' KeepAll    l = " " <> drop 1 l
 stripBird' KeepIndent l = drop 2 l
 ```
 Then we have Jekyll Liquid code blocks.
 
-```
+``` haskell
 isJekyll :: Maybe Lang -> Recogniser
 isJekyll lang l
   | "{% highlight" `isPrefixOf` stripStart l
@@ -131,7 +131,7 @@ Below we only check if the given language occurs *anywhere* in the
 string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
-```
+``` haskell
 isTildeFence :: Maybe Lang -> Recogniser
 isTildeFence lang l =
   if "~~~" `isPrefixOf` stripStart l then
@@ -142,7 +142,7 @@ isTildeFence lang l =
   else
     Nothing
 ```
-```
+``` haskell
 isBacktickFence :: Maybe Lang -> Recogniser
 isBacktickFence lang l =
   if "```" `isPrefixOf` stripStart l then
@@ -156,7 +156,7 @@ isBacktickFence lang l =
 In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
 
-```
+``` haskell
 isDelimiter :: Style -> Recogniser
 isDelimiter ds l = asum (map go ds)
   where
@@ -170,7 +170,7 @@ isDelimiter ds l = asum (map go ds)
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
 
-```
+``` haskell
 match :: Delimiter -> Delimiter -> Bool
 match (LaTeX Begin)     (LaTeX End)             = True
 match (Jekyll Begin _)  (Jekyll End _)          = True
@@ -192,7 +192,7 @@ output.
 
 The options for source styles are as follows:
 
-```
+``` haskell
 type Style = [Delimiter]
 
 bird, latex, orgmode, haskell, jekyll, tildefence, backtickfence, markdown, all, infer :: Style
@@ -207,11 +207,11 @@ markdown         = bird <> tildefence <> backtickfence
 all              = latex <> markdown
 infer            = []
 ```
-```
+``` haskell
 forLang :: Lang -> Style -> Style
 forLang = map . setLang . Just
 ```
-```
+``` haskell
 setLang :: Maybe Lang -> Delimiter -> Delimiter
 setLang lang (TildeFence _)       = TildeFence lang
 setLang lang (BacktickFence _)    = BacktickFence lang
@@ -224,7 +224,7 @@ attempt to guess the style based on the first delimiter it
 encounters. It will try to be permissive in this, and therefore, if
 it encounters a Bird-tag, will infer general Markdown-style.
 
-```
+``` haskell
 doInfer :: Maybe Delimiter -> Style
 doInfer  Nothing             = []
 doInfer (Just (LaTeX _))     = latex
@@ -235,7 +235,7 @@ doInfer (Just _)             = markdown
 Lastly, we would like `unlit` to be able to operate in several
 different whitespace modes. For now, these are:
 
-```
+``` haskell
 data WhitespaceMode
   = KeepIndent -- ^ keeps only indentations
   | KeepAll    -- ^ keeps all lines and whitespace
@@ -244,7 +244,7 @@ We would like to combine the inferred style with current styles as
 one would combine maybe values using the alternative operator
 `(<|>)`. Therefore, we will define our own version of this operator.
 
-```
+``` haskell
 or :: [a] -> [a] -> [a]
 xs `or` [] = xs
 [] `or` ys = ys
@@ -253,7 +253,7 @@ xs `or` _  = xs
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-```
+``` haskell
 unlit :: WhitespaceMode -> Style -> Text -> Either Error Text
 unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 ```
@@ -261,12 +261,12 @@ However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
 of code block (if any) the automaton currently is in.
 
-```
+``` haskell
 type State = Maybe Delimiter
 ```
 With this, the signature of `unlit'` becomes:
 
-```
+``` haskell
 unlit' :: WhitespaceMode -> Style -> State -> [(Int, Text)] -> Either Error [Text]
 unlit' _ _ _ [] = Right []
 unlit' ws ss q ((n, l):ls) = case (q, q') of
@@ -305,7 +305,7 @@ arbitrary code... I wish I was.
 What `relit` will do is read a literate file using one style of
 delimiters and emit the same file using an other style of delimiters.
 
-```
+``` haskell
 relit :: Style -> Style -> Text -> Either Error Text
 relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
 ```
@@ -319,7 +319,7 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
       adding indentation information to all delimiters (which I'll do in the
       future, together with making a general `isEnd` predicate).
 
-```
+``` haskell
 emitBird :: Text -> Text
 emitBird l = "> " <> l
 
@@ -344,7 +344,7 @@ emitClose  del                 = emitDelimiter (setLang Nothing del)
 Using these simple functions we can easily define the `relit'`
 function.
 
-```
+``` haskell
 relit' :: Style -> Delimiter -> State -> [(Int, Text)] -> Either Error [Text]
 relit' _ _   Nothing    [] = Right []
 relit' _ ts (Just Bird) [] = Right $ emitClose ts : []
@@ -374,13 +374,13 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
 Error handling
 ==============
 
-```
+``` haskell
 data Error
   = SpuriousDelimiter Int Delimiter
   | UnexpectedEnd     Delimiter
   deriving (Eq, Show)
 ```
-```
+``` haskell
 showError :: Error -> Text
 showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
 showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious " <> emitDelimiter q
@@ -388,10 +388,10 @@ showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious "
 Helper functions
 ================
 
-```
+``` haskell
 infixr 5 >#<
 ```
-```
+``` haskell
 (>#<) :: Text -> Text -> Text
 "" >#< y  = y
 x  >#< "" = x

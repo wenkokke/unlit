@@ -20,7 +20,7 @@ install: src/Main.hs src/Unlit/Text.lhs src/Unlit/String.hs
 
 README.md: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs \
-	| unlit -t backtickfence -l haskell \
+	| unlit --language haskell -t backtickfence -l haskell \
 	| sed '1i [![Build Status](https://travis-ci.org/pepijnkokke/unlit.png?branch=master)](https://travis-ci.org/pepijnkokke/unlit)' \
         > README.md
 
