@@ -1,3 +1,8 @@
+### master
+
+- Use `Either Error Text` for pure error handling
+- Compile with `-Wall`
+
 ### Version 0.3.0.0
 
 - Added an argument to the program and to the `unlit` function which
