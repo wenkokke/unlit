@@ -19,11 +19,11 @@ stripEnd = dropWhileEnd isSpace
 
 data Delimiter
   = LaTeX         BeginEnd
-  | OrgMode       BeginEnd (Maybe Lang)
+  | OrgMode       BeginEnd Lang
   | Bird
-  | Jekyll        BeginEnd (Maybe Lang)
-  | TildeFence    (Maybe Lang)
-  | BacktickFence (Maybe Lang)
+  | Jekyll        BeginEnd Lang
+  | TildeFence    Lang
+  | BacktickFence Lang
   deriving (Eq, Show)
 
 data BeginEnd
@@ -31,7 +31,7 @@ data BeginEnd
   | End
   deriving (Eq, Show)
 
-type Lang = String
+type Lang = Maybe String
 
 emitDelimiter :: Delimiter -> String
 emitDelimiter (LaTeX Begin)     = "\\begin{code}"
@@ -52,7 +52,7 @@ isLaTeX l
   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
   | otherwise = Nothing
 
-isOrgMode :: Maybe Lang -> Recogniser
+isOrgMode :: Lang -> Recogniser
 isOrgMode lang l
   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
     && maybe True (`isInfixOf` l) lang      = Just $ OrgMode Begin lang
@@ -69,7 +69,7 @@ stripBird' :: WhitespaceMode -> String -> String
 stripBird' KeepAll    l = " " <> drop 1 l
 stripBird' KeepIndent l = drop 2 l
 
-isJekyll :: Maybe Lang -> Recogniser
+isJekyll :: Lang -> Recogniser
 isJekyll lang l
   | "{% highlight" `isPrefixOf` stripStart l
     && maybe True (`isInfixOf` l) lang
@@ -77,7 +77,7 @@ isJekyll lang l
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 
-isTildeFence :: Maybe Lang -> Recogniser
+isTildeFence :: Lang -> Recogniser
 isTildeFence lang l =
   if "~~~" `isPrefixOf` stripStart l then
     if maybe True (`isInfixOf` l) lang then
@@ -87,7 +87,7 @@ isTildeFence lang l =
   else
     Nothing
 
-isBacktickFence :: Maybe Lang -> Recogniser
+isBacktickFence :: Lang -> Recogniser
 isBacktickFence lang l =
   if "```" `isPrefixOf` stripStart l then
     if maybe True (`isInfixOf` l) lang then
@@ -130,9 +130,9 @@ all              = latex <> markdown
 infer            = []
 
 forLang :: Lang -> Style -> Style
-forLang = map . setLang . Just
+forLang = map . setLang
 
-setLang :: Maybe Lang -> Delimiter -> Delimiter
+setLang :: Lang -> Delimiter -> Delimiter
 setLang lang (TildeFence _)       = TildeFence lang
 setLang lang (BacktickFence _)    = BacktickFence lang
 setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang

@@ -23,11 +23,11 @@ blocks.
 
 > data Delimiter
 >   = LaTeX         BeginEnd
->   | OrgMode       BeginEnd (Maybe Lang)
+>   | OrgMode       BeginEnd Lang
 >   | Bird
->   | Jekyll        BeginEnd (Maybe Lang)
->   | TildeFence    (Maybe Lang)
->   | BacktickFence (Maybe Lang)
+>   | Jekyll        BeginEnd Lang
+>   | TildeFence    Lang
+>   | BacktickFence Lang
 >   deriving (Eq, Show)
 
 Some of these code blocks need to  carry around additional information.
@@ -42,7 +42,7 @@ On the other hand, Markdown-style fenced code blocks can be annotated
 with all sorts of information. Most prominently, their programming
 language.
 
-> type Lang = Text
+> type Lang = Maybe Text
 
 In order to properly show these code blocks, we will define the
 following instance.
@@ -73,7 +73,7 @@ position (since we do not support indented code blocks).
 >   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
 >   | otherwise = Nothing
 
-> isOrgMode :: Maybe Lang -> Recogniser
+> isOrgMode :: Lang -> Recogniser
 > isOrgMode lang l
 >   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
 >     && maybe True (`isInfixOf` l) lang      = Just $ OrgMode Begin lang
@@ -100,7 +100,7 @@ whitespace modes we also remove a the first space following it.
 
 Then we have Jekyll Liquid code blocks.
 
-> isJekyll :: Maybe Lang -> Recogniser
+> isJekyll :: Lang -> Recogniser
 > isJekyll lang l
 >   | "{% highlight" `isPrefixOf` stripStart l
 >     && maybe True (`isInfixOf` l) lang
@@ -117,7 +117,7 @@ Below we only check if the given language occurs *anywhere* in the
 string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
-> isTildeFence :: Maybe Lang -> Recogniser
+> isTildeFence :: Lang -> Recogniser
 > isTildeFence lang l =
 >   if "~~~" `isPrefixOf` stripStart l then
 >     if maybe True (`isInfixOf` l) lang then
@@ -127,7 +127,7 @@ well-formed Markdown.
 >   else
 >     Nothing
 
-> isBacktickFence :: Maybe Lang -> Recogniser
+> isBacktickFence :: Lang -> Recogniser
 > isBacktickFence lang l =
 >   if "```" `isPrefixOf` stripStart l then
 >     if maybe True (`isInfixOf` l) lang then
@@ -189,9 +189,9 @@ The options for source styles are as follows:
 > infer            = []
 
 > forLang :: Lang -> Style -> Style
-> forLang = map . setLang . Just
+> forLang = map . setLang
 
-> setLang :: Maybe Lang -> Delimiter -> Delimiter
+> setLang :: Lang -> Delimiter -> Delimiter
 > setLang lang (TildeFence _)       = TildeFence lang
 > setLang lang (BacktickFence _)    = BacktickFence lang
 > setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang

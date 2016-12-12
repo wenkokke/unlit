@@ -27,11 +27,11 @@ blocks.
 ``` haskell
 data Delimiter
   = LaTeX         BeginEnd
-  | OrgMode       BeginEnd (Maybe Lang)
+  | OrgMode       BeginEnd Lang
   | Bird
-  | Jekyll        BeginEnd (Maybe Lang)
-  | TildeFence    (Maybe Lang)
-  | BacktickFence (Maybe Lang)
+  | Jekyll        BeginEnd Lang
+  | TildeFence    Lang
+  | BacktickFence Lang
   deriving (Eq, Show)
 ```
 Some of these code blocks need to  carry around additional information.
@@ -48,7 +48,7 @@ with all sorts of information. Most prominently, their programming
 language.
 
 ``` haskell
-type Lang = Text
+type Lang = Maybe Text
 ```
 In order to properly show these code blocks, we will define the
 following instance.
@@ -83,7 +83,7 @@ isLaTeX l
   | otherwise = Nothing
 ```
 ``` haskell
-isOrgMode :: Maybe Lang -> Recogniser
+isOrgMode :: Lang -> Recogniser
 isOrgMode lang l
   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
     && maybe True (`isInfixOf` l) lang      = Just $ OrgMode Begin lang
@@ -114,7 +114,7 @@ stripBird' KeepIndent l = drop 2 l
 Then we have Jekyll Liquid code blocks.
 
 ``` haskell
-isJekyll :: Maybe Lang -> Recogniser
+isJekyll :: Lang -> Recogniser
 isJekyll lang l
   | "{% highlight" `isPrefixOf` stripStart l
     && maybe True (`isInfixOf` l) lang
@@ -132,7 +132,7 @@ string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
 ``` haskell
-isTildeFence :: Maybe Lang -> Recogniser
+isTildeFence :: Lang -> Recogniser
 isTildeFence lang l =
   if "~~~" `isPrefixOf` stripStart l then
     if maybe True (`isInfixOf` l) lang then
@@ -143,7 +143,7 @@ isTildeFence lang l =
     Nothing
 ```
 ``` haskell
-isBacktickFence :: Maybe Lang -> Recogniser
+isBacktickFence :: Lang -> Recogniser
 isBacktickFence lang l =
   if "```" `isPrefixOf` stripStart l then
     if maybe True (`isInfixOf` l) lang then
@@ -209,10 +209,10 @@ infer            = []
 ```
 ``` haskell
 forLang :: Lang -> Style -> Style
-forLang = map . setLang . Just
+forLang = map . setLang
 ```
 ``` haskell
-setLang :: Maybe Lang -> Delimiter -> Delimiter
+setLang :: Lang -> Delimiter -> Delimiter
 setLang lang (TildeFence _)       = TildeFence lang
 setLang lang (BacktickFence _)    = BacktickFence lang
 setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
