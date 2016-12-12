@@ -2,7 +2,7 @@
 module Main where
 
 import           Data.Char (toLower)
-import           Data.Text (Text)
+import           Data.Text (Text, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Data.Version (showVersion)
@@ -56,7 +56,7 @@ parseWsMode str = case map toLower str of
 options :: [ OptDescr (Options -> IO Options) ]
 options =
   [ Option "f" ["from"]
-    (ReqArg (\arg opt -> return opt { optSourceStyle = (optSourceStyle opt) ++ (parseStyle arg) })
+    (ReqArg (\arg opt -> return opt { optSourceStyle = optSourceStyle opt ++ parseStyle arg })
             "STYLE_NAME")
     "Source style (all, bird, jekyll, haskell, latex, markdown, tildefence, backtickfence)"
   , Option "t" ["to"]
@@ -126,7 +126,7 @@ main = do
   let ts' = maybe ts (\l -> forLang l ts) lang
 
   -- define unlit/relit
-  let run = if null ts then unlit wsmode ss' else relit ss' ts'
+  let run = either (error . unpack . showError) id . if null ts then unlit wsmode ss' else relit ss' ts'
 
   -- run unlit/relit
   istream' >>= ostream' . run

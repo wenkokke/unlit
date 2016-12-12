@@ -3,14 +3,16 @@
 >   unlit, relit
 >   , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
 >   , Lang, forLang, WhitespaceMode(..)
+>   , Error(..), showError
 > ) where
 
+> import Data.Functor ((<$>))
 > import Data.Foldable (asum)
 > import Data.Bool (bool)
 > import Data.Maybe (fromMaybe, maybeToList)
 > import Data.Monoid ((<>))
 > import Prelude hiding (all, or, String, unlines, lines, drop)
-> import Data.Text (Text, stripStart, stripEnd, isPrefixOf, isSuffixOf, isInfixOf, unlines, lines, unpack, drop)
+> import Data.Text (Text, stripStart, stripEnd, isPrefixOf, isSuffixOf, isInfixOf, unlines, lines, pack, drop)
 
 What are literate programs?
 ===========================
@@ -227,8 +229,8 @@ one would combine maybe values using the alternative operator
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
-> unlit :: WhitespaceMode -> Style -> Text -> Text
-> unlit ws ss = unlines . unlit' ws ss Nothing . zip [1..] . lines
+> unlit :: WhitespaceMode -> Style -> Text -> Either Error Text
+> unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 
 However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
@@ -238,28 +240,27 @@ of code block (if any) the automaton currently is in.
 
 With this, the signature of `unlit'` becomes:
 
-> unlit' :: WhitespaceMode -> Style -> State -> [(Int, Text)] -> [Text]
-> unlit' _ _ _ [] = []
+> unlit' :: WhitespaceMode -> Style -> State -> [(Int, Text)] -> Either Error [Text]
+> unlit' _ _ _ [] = Right []
 > unlit' ws ss q ((n, l):ls) = case (q, q') of
->
 >
 >   (Nothing  , Nothing)                 -> continue   $ lineIfKeepAll
 >   (Nothing  , Just Bird)               -> open       $ lineIfKeepIndent <> [stripBird' ws l]
 >   (Just Bird, Just Bird)               -> continue   $                     [stripBird' ws l]
 >   (Just Bird, Nothing)                 -> close      $ lineIfKeepAll
->   (Nothing  , Just (LaTeX End))        -> spurious n $ LaTeX End
->   (Nothing  , Just (Jekyll End lang))  -> spurious n $ Jekyll End lang
->   (Nothing  , Just (OrgMode End lang)) -> spurious n $ OrgMode End lang
+>   (Nothing  , Just (LaTeX End))        -> Left $ SpuriousDelimiter n $ LaTeX End
+>   (Nothing  , Just (Jekyll End lang))  -> Left $ SpuriousDelimiter n $ Jekyll End lang
+>   (Nothing  , Just (OrgMode End lang)) -> Left $ SpuriousDelimiter n $ OrgMode End lang
 >   (Nothing  , Just _o)                 -> open       $ lineIfKeepAll <> lineIfKeepIndent
 >   (Just _o  , Nothing)                 -> continue   $ [l]
 >   (Just _o  , Just Bird)               -> continue   $ [l]
 >   (Just o   , Just c)                  -> if not (o `match` c) then
->                                        spurious n c
->                                      else
->                                        close $ lineIfKeepAll
+>                                             Left $ SpuriousDelimiter n c
+>                                           else
+>                                             close $ lineIfKeepAll
 >   where
 >     q'                = isDelimiter (ss `or` all) l
->     continueWith r l' = l' <> unlit' ws (ss `or` doInfer q') r ls
+>     continueWith r l' = (l' <>) <$> unlit' ws (ss `or` doInfer q') r ls
 >     open              = continueWith q'
 >     continue          = continueWith q
 >     close             = continueWith Nothing
@@ -277,8 +278,8 @@ arbitrary code... I wish I was.
 What `relit` will do is read a literate file using one style of
 delimiters and emit the same file using an other style of delimiters.
 
-> relit :: Style -> Style -> Text -> Text
-> relit ss ts = unlines . relit' ss (head ts) Nothing . zip [1..] . lines
+> relit :: Style -> Style -> Text -> Either Error Text
+> relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
 
 Again, we will interpret the helper function `relit'` as an
 automaton, which remembers the current state. However, we now also
@@ -314,31 +315,43 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
 Using these simple functions we can easily define the `relit'`
 function.
 
-> relit' :: Style -> Delimiter -> State -> [(Int, Text)] -> [Text]
-> relit' _ _   Nothing    [] = []
-> relit' _ ts (Just Bird) [] = emitClose ts : []
-> relit' _ _  (Just o)    [] = eof o
+> relit' :: Style -> Delimiter -> State -> [(Int, Text)] -> Either Error [Text]
+> relit' _ _   Nothing    [] = Right []
+> relit' _ ts (Just Bird) [] = Right $ emitClose ts : []
+> relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 > relit' ss ts q ((n, l):ls) = case (q, q') of
 >
->   (Nothing  , Nothing)                 -> l : continue
+>   (Nothing  , Nothing)                 -> (l :) <$> continue
 >   (Nothing  , Just Bird)               -> blockOpen     $ Just (stripBird l)
 >   (Just Bird, Just Bird)               -> blockContinue $       stripBird l
 >   (Just Bird, Nothing)                 -> blockClose
->   (Nothing  , Just (LaTeX End))        -> spurious n    $ LaTeX End
->   (Nothing  , Just (Jekyll End lang))  -> spurious n    $ Jekyll End lang
->   (Nothing  , Just (OrgMode End lang)) -> spurious n    $ OrgMode End lang
+>   (Nothing  , Just (LaTeX End))        -> Left $ SpuriousDelimiter n $ LaTeX End
+>   (Nothing  , Just (Jekyll End lang))  -> Left $ SpuriousDelimiter n $ Jekyll End lang
+>   (Nothing  , Just (OrgMode End lang)) -> Left $ SpuriousDelimiter n $ OrgMode End lang
 >   (Nothing  , Just _o)                 -> blockOpen     $ Nothing
 >   (Just _o  , Nothing)                 -> blockContinue $ l
->   (Just _o  , Just Bird)               -> l : continue
->   (Just o   , Just c)                  -> if o `match` c then blockClose else spurious n c
+>   (Just _o  , Just Bird)               -> (l :) <$> continue
+>   (Just o   , Just c)                  -> if o `match` c then blockClose else Left $ SpuriousDelimiter n c
 >
 >   where
 >     q'               = isDelimiter (ss `or` all) l
 >     continueWith  r  = relit' (ss `or` doInfer q') ts r ls
 >     continue         = continueWith q
->     blockOpen     l' = emitOpen  ts l' <> continueWith q'
->     blockContinue l' = emitCode  ts l' : continue
->     blockClose       = emitClose ts   : continueWith Nothing
+>     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
+>     blockContinue l' = (emitCode  ts l' :)  <$> continue
+>     blockClose       = (emitClose ts    :)  <$> continueWith Nothing
+
+Error handling
+==============
+
+> data Error
+>   = SpuriousDelimiter Int Delimiter
+>   | UnexpectedEnd     Delimiter
+>   deriving (Eq, Show)
+
+> showError :: Error -> Text
+> showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
+> showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious " <> emitDelimiter q
 
 Helper functions
 ================
@@ -349,9 +362,3 @@ Helper functions
 > "" >#< y  = y
 > x  >#< "" = x
 > x  >#< y  = x <> " " <> y
-
-> eof :: Delimiter -> a
-> eof q = error $ "unexpected EOF; unmatched " <> unpack (emitDelimiter q)
-
-> spurious :: Int -> Delimiter -> a
-> spurious n q = error $ "at line " <> show n <> ": spurious " <> unpack (emitDelimiter q)

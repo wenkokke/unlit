@@ -4,8 +4,10 @@ module Unlit.String (
   unlit, relit
   , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
   , Lang, forLang, WhitespaceMode(..)
+  , Error(..), showError
 ) where
 
+import Data.Functor ((<$>))
 import Data.Foldable (asum)
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe, maybeToList)
@@ -155,41 +157,40 @@ xs `or` [] = xs
 [] `or` ys = ys
 xs `or` _  = xs
 
-unlit :: WhitespaceMode -> Style -> String -> String
-unlit ws ss = unlines . unlit' ws ss Nothing . zip [1..] . lines
+unlit :: WhitespaceMode -> Style -> String -> Either Error String
+unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 
 type State = Maybe Delimiter
 
-unlit' :: WhitespaceMode -> Style -> State -> [(Int, String)] -> [String]
-unlit' _ _ _ [] = []
+unlit' :: WhitespaceMode -> Style -> State -> [(Int, String)] -> Either Error [String]
+unlit' _ _ _ [] = Right []
 unlit' ws ss q ((n, l):ls) = case (q, q') of
-
 
   (Nothing  , Nothing)                 -> continue   $ lineIfKeepAll
   (Nothing  , Just Bird)               -> open       $ lineIfKeepIndent <> [stripBird' ws l]
   (Just Bird, Just Bird)               -> continue   $                     [stripBird' ws l]
   (Just Bird, Nothing)                 -> close      $ lineIfKeepAll
-  (Nothing  , Just (LaTeX End))        -> spurious n $ LaTeX End
-  (Nothing  , Just (Jekyll End lang))  -> spurious n $ Jekyll End lang
-  (Nothing  , Just (OrgMode End lang)) -> spurious n $ OrgMode End lang
+  (Nothing  , Just (LaTeX End))        -> Left $ SpuriousDelimiter n $ LaTeX End
+  (Nothing  , Just (Jekyll End lang))  -> Left $ SpuriousDelimiter n $ Jekyll End lang
+  (Nothing  , Just (OrgMode End lang)) -> Left $ SpuriousDelimiter n $ OrgMode End lang
   (Nothing  , Just _o)                 -> open       $ lineIfKeepAll <> lineIfKeepIndent
   (Just _o  , Nothing)                 -> continue   $ [l]
   (Just _o  , Just Bird)               -> continue   $ [l]
   (Just o   , Just c)                  -> if not (o `match` c) then
-                                       spurious n c
-                                     else
-                                       close $ lineIfKeepAll
+                                            Left $ SpuriousDelimiter n c
+                                          else
+                                            close $ lineIfKeepAll
   where
     q'                = isDelimiter (ss `or` all) l
-    continueWith r l' = l' <> unlit' ws (ss `or` doInfer q') r ls
+    continueWith r l' = (l' <>) <$> unlit' ws (ss `or` doInfer q') r ls
     open              = continueWith q'
     continue          = continueWith q
     close             = continueWith Nothing
     lineIfKeepAll     = case ws of KeepAll    -> [""]; _ -> []
     lineIfKeepIndent  = case ws of KeepIndent -> [""]; _ -> []
 
-relit :: Style -> Style -> String -> String
-relit ss ts = unlines . relit' ss (head ts) Nothing . zip [1..] . lines
+relit :: Style -> Style -> String -> Either Error String
+relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
 
 emitBird :: String -> String
 emitBird l = "> " <> l
@@ -212,31 +213,40 @@ emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
 emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
 emitClose  del                 = emitDelimiter (setLang Nothing del)
 
-relit' :: Style -> Delimiter -> State -> [(Int, String)] -> [String]
-relit' _ _   Nothing    [] = []
-relit' _ ts (Just Bird) [] = emitClose ts : []
-relit' _ _  (Just o)    [] = eof o
+relit' :: Style -> Delimiter -> State -> [(Int, String)] -> Either Error [String]
+relit' _ _   Nothing    [] = Right []
+relit' _ ts (Just Bird) [] = Right $ emitClose ts : []
+relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)                 -> l : continue
+  (Nothing  , Nothing)                 -> (l :) <$> continue
   (Nothing  , Just Bird)               -> blockOpen     $ Just (stripBird l)
   (Just Bird, Just Bird)               -> blockContinue $       stripBird l
   (Just Bird, Nothing)                 -> blockClose
-  (Nothing  , Just (LaTeX End))        -> spurious n    $ LaTeX End
-  (Nothing  , Just (Jekyll End lang))  -> spurious n    $ Jekyll End lang
-  (Nothing  , Just (OrgMode End lang)) -> spurious n    $ OrgMode End lang
+  (Nothing  , Just (LaTeX End))        -> Left $ SpuriousDelimiter n $ LaTeX End
+  (Nothing  , Just (Jekyll End lang))  -> Left $ SpuriousDelimiter n $ Jekyll End lang
+  (Nothing  , Just (OrgMode End lang)) -> Left $ SpuriousDelimiter n $ OrgMode End lang
   (Nothing  , Just _o)                 -> blockOpen     $ Nothing
   (Just _o  , Nothing)                 -> blockContinue $ l
-  (Just _o  , Just Bird)               -> l : continue
-  (Just o   , Just c)                  -> if o `match` c then blockClose else spurious n c
+  (Just _o  , Just Bird)               -> (l :) <$> continue
+  (Just o   , Just c)                  -> if o `match` c then blockClose else Left $ SpuriousDelimiter n c
 
   where
     q'               = isDelimiter (ss `or` all) l
     continueWith  r  = relit' (ss `or` doInfer q') ts r ls
     continue         = continueWith q
-    blockOpen     l' = emitOpen  ts l' <> continueWith q'
-    blockContinue l' = emitCode  ts l' : continue
-    blockClose       = emitClose ts   : continueWith Nothing
+    blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
+    blockContinue l' = (emitCode  ts l' :)  <$> continue
+    blockClose       = (emitClose ts    :)  <$> continueWith Nothing
+
+data Error
+  = SpuriousDelimiter Int Delimiter
+  | UnexpectedEnd     Delimiter
+  deriving (Eq, Show)
+
+showError :: Error -> String
+showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
+showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious " <> emitDelimiter q
 
 infixr 5 >#<
 
@@ -244,10 +254,4 @@ infixr 5 >#<
 "" >#< y  = y
 x  >#< "" = x
 x  >#< y  = x <> " " <> y
-
-eof :: Delimiter -> a
-eof q = error $ "unexpected EOF; unmatched " <>  (emitDelimiter q)
-
-spurious :: Int -> Delimiter -> a
-spurious n q = error $ "at line " <> show n <> ": spurious " <>  (emitDelimiter q)
 

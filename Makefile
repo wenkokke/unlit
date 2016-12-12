@@ -27,14 +27,14 @@ README.md: Makefile src/Unlit/Text.lhs
 src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs                                              \
 	| unlit -f bird -t code                                             \
-	| sed '13d;14d'                                                     \
-	| sed 's/Text/String/g;s/unpack//g'								                  \
-	| sed '13i import Prelude hiding \(all, or\)'                        \
-	| sed '14i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
-	| sed '15i import Data.Char \(isSpace\)'                      \
-	| sed '16i stripStart, stripEnd :: String -> String'  				\
-	| sed '17i stripStart = dropWhile isSpace'  									\
-  | sed '18i stripEnd = dropWhileEnd isSpace'										\
+	| sed '15d;16d'                                                     \
+	| sed 's/Text/String/g;s/pack//g'   							                  \
+	| sed '15i import Prelude hiding \(all, or\)'                        \
+	| sed '16i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
+	| sed '17i import Data.Char \(isSpace\)'                      \
+	| sed '18i stripStart, stripEnd :: String -> String'  				\
+	| sed '19i stripStart = dropWhile isSpace'  									\
+  | sed '20i stripEnd = dropWhileEnd isSpace'										\
 	> src/Unlit/String.hs
 
 .PHONY: test dist build install
