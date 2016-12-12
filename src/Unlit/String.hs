@@ -139,12 +139,12 @@ setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
 setLang lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
 setLang _     d                   = d
 
-doInfer :: Maybe Delimiter -> Style
-doInfer  Nothing             = []
-doInfer (Just (LaTeX _))     = latex
-doInfer (Just (Jekyll _ _))  = jekyll
-doInfer (Just (OrgMode _ _)) = orgmode
-doInfer (Just _)             = markdown
+inferred :: Maybe Delimiter -> Style
+inferred  Nothing             = []
+inferred (Just (LaTeX _))     = latex
+inferred (Just (Jekyll _ _))  = jekyll
+inferred (Just (OrgMode _ _)) = orgmode
+inferred (Just _)             = markdown
 
 data WhitespaceMode
   = KeepIndent -- ^ keeps only indentations
@@ -180,7 +180,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
                                             close $ lineIfKeepAll
   where
     q'                = isDelimiter (ss `or` all) l
-    continueWith r l' = (l' <>) <$> unlit' ws (ss `or` doInfer q') r ls
+    continueWith r l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls
     open              = continueWith q'
     continue          = continueWith q
     close             = continueWith Nothing
@@ -231,7 +231,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
 
   where
     q'               = isDelimiter (ss `or` all) l
-    continueWith  r  = relit' (ss `or` doInfer q') ts r ls
+    continueWith  r  = relit' (ss `or` inferred q') ts r ls
     continue         = continueWith q
     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
     blockContinue l' = (emitCode  ts l' :)  <$> continue

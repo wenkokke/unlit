@@ -203,12 +203,12 @@ attempt to guess the style based on the first delimiter it
 encounters. It will try to be permissive in this, and therefore, if
 it encounters a Bird-tag, will infer general Markdown-style.
 
-> doInfer :: Maybe Delimiter -> Style
-> doInfer  Nothing             = []
-> doInfer (Just (LaTeX _))     = latex
-> doInfer (Just (Jekyll _ _))  = jekyll
-> doInfer (Just (OrgMode _ _)) = orgmode
-> doInfer (Just _)             = markdown
+> inferred :: Maybe Delimiter -> Style
+> inferred  Nothing             = []
+> inferred (Just (LaTeX _))     = latex
+> inferred (Just (Jekyll _ _))  = jekyll
+> inferred (Just (OrgMode _ _)) = orgmode
+> inferred (Just _)             = markdown
 
 Lastly, we would like `unlit` to be able to operate in several
 different whitespace modes. For now, these are:
@@ -260,7 +260,7 @@ With this, the signature of `unlit'` becomes:
 >                                             close $ lineIfKeepAll
 >   where
 >     q'                = isDelimiter (ss `or` all) l
->     continueWith r l' = (l' <>) <$> unlit' ws (ss `or` doInfer q') r ls
+>     continueWith r l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls
 >     open              = continueWith q'
 >     continue          = continueWith q
 >     close             = continueWith Nothing
@@ -335,7 +335,7 @@ function.
 >
 >   where
 >     q'               = isDelimiter (ss `or` all) l
->     continueWith  r  = relit' (ss `or` doInfer q') ts r ls
+>     continueWith  r  = relit' (ss `or` inferred q') ts r ls
 >     continue         = continueWith q
 >     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
 >     blockContinue l' = (emitCode  ts l' :)  <$> continue
