@@ -122,8 +122,8 @@ main = do
   let istream' = if ghc then T.readFile  (nonOptions !! 1) else istream
   let ostream' = if ghc then T.writeFile (nonOptions !! 2) else ostream
 
-  let ss' = forLang lang ss
-  let ts' = forLang lang ts
+  let ss' = setLang lang ss
+  let ts' = setLang lang ts
 
   -- define unlit/relit
   let run = either (error . unpack . showError) id . if null ts then unlit wsmode ss' else relit ss' ts'
