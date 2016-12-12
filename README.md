@@ -23,14 +23,14 @@ these are LaTeX-style code tags, Bird tags and Markdown fenced code
 blocks.
 
 ```
-data Delim
+data Delimiter
   = LaTeX         BeginEnd
   | OrgMode       BeginEnd (Maybe Lang)
   | Bird
   | Jekyll        BeginEnd (Maybe Lang)
   | TildeFence    (Maybe Lang)
   | BacktickFence (Maybe Lang)
-  deriving (Eq)
+  deriving (Eq, Show)
 ```
 Some of these code blocks need to  carry around additional information.
 For instance, LaTex code blocks use distinct opening and closing tags.
@@ -39,7 +39,7 @@ For instance, LaTex code blocks use distinct opening and closing tags.
 data BeginEnd
   = Begin
   | End
-  deriving (Eq)
+  deriving (Eq, Show)
 ```
 On the other hand, Markdown-style fenced code blocks can be annotated
 with all sorts of information. Most prominently, their programming
@@ -52,22 +52,22 @@ In order to properly show these code blocks, we will define the
 following instance.
 
 ```
-emitDelim :: Delim -> Text
-emitDelim (LaTeX Begin)     = "\\begin{code}"
-emitDelim (LaTeX End)       = "\\end{code}"
-emitDelim (OrgMode Begin l) = "#+BEGIN_SRC" >#< fromMaybe "" l
-emitDelim (OrgMode End _)   = "#+END_SRC"
-emitDelim  Bird             = ">"
-emitDelim (Jekyll Begin l)  = "{% highlight " >#< fromMaybe "" l >#< " %}"
-emitDelim (Jekyll End   _)  = "{% endhighlight %}"
-emitDelim (TildeFence l)    = "~~~" >#< fromMaybe "" l
-emitDelim (BacktickFence l) = "```" >#< fromMaybe "" l
+emitDelimiter :: Delimiter -> Text
+emitDelimiter (LaTeX Begin)     = "\\begin{code}"
+emitDelimiter (LaTeX End)       = "\\end{code}"
+emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" >#< fromMaybe "" l
+emitDelimiter (OrgMode End _)   = "#+END_SRC"
+emitDelimiter  Bird             = ">"
+emitDelimiter (Jekyll Begin l)  = "{% highlight " >#< fromMaybe "" l >#< " %}"
+emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
+emitDelimiter (TildeFence l)    = "~~~" >#< fromMaybe "" l
+emitDelimiter (BacktickFence l) = "```" >#< fromMaybe "" l
 ```
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
 
 ```
-type Recogniser = Text -> Maybe Delim
+type Recogniser = Text -> Maybe Delimiter
 ```
 For instance, in LaTeX-style, a codeblock is delimited by
 `\begin{code}` and `\end{code}` tags, which must appear at the first
@@ -155,8 +155,8 @@ In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
 
 ```
-isDelim :: Style -> Recogniser
-isDelim ds l = asum (map go ds)
+isDelimiter :: Style -> Recogniser
+isDelimiter ds l = asum (map go ds)
   where
     go (LaTeX _)            = isLaTeX l
     go  Bird                = isBird l
@@ -169,7 +169,7 @@ And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
 
 ```
-match :: Delim -> Delim -> Bool
+match :: Delimiter -> Delimiter -> Bool
 match (LaTeX Begin)     (LaTeX End)             = True
 match (Jekyll Begin _)  (Jekyll End _)          = True
 match (OrgMode Begin _) (OrgMode End _)         = True
@@ -191,7 +191,7 @@ output.
 The options for source styles are as follows:
 
 ```
-type Style = [Delim]
+type Style = [Delimiter]
 
 bird, latex, orgmode, haskell, jekyll, tildefence, backtickfence, markdown, all, infer :: Style
 bird             = [Bird]
@@ -210,7 +210,7 @@ forLang :: Lang -> Style -> Style
 forLang = map . setLang . Just
 ```
 ```
-setLang :: Maybe Lang -> Delim -> Delim
+setLang :: Maybe Lang -> Delimiter -> Delimiter
 setLang lang (TildeFence _)       = TildeFence lang
 setLang lang (BacktickFence _)    = BacktickFence lang
 setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
@@ -223,7 +223,7 @@ encounters. It will try to be permissive in this, and therefore, if
 it encounters a Bird-tag, will infer general Markdown-style.
 
 ```
-doInfer :: Maybe Delim -> Style
+doInfer :: Maybe Delimiter -> Style
 doInfer  Nothing             = []
 doInfer (Just (LaTeX _))     = latex
 doInfer (Just (Jekyll _ _))  = jekyll
@@ -260,7 +260,7 @@ state automaton, where the states are used to remember the what kind
 of code block (if any) the automaton currently is in.
 
 ```
-type State = Maybe Delim
+type State = Maybe Delimiter
 ```
 With this, the signature of `unlit'` becomes:
 
@@ -285,7 +285,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
                                      else
                                        close $ lineIfKeepAll
   where
-    q'                = isDelim (ss `or` all) l
+    q'                = isDelimiter (ss `or` all) l
     continueWith r l' = l' <> unlit' ws (ss `or` doInfer q') r ls
     open              = continueWith q'
     continue          = continueWith q
@@ -322,29 +322,29 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
 emitBird :: Text -> Text
 emitBird l = "> " <> l
 
-emitOpen :: Delim -> Maybe Text -> [Text]
+emitOpen :: Delimiter -> Maybe Text -> [Text]
 emitOpen  Bird              l = "" : map emitBird (maybeToList l)
 emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
 emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
-emitOpen  del               l = emitDelim del : maybeToList l
+emitOpen  del               l = emitDelimiter del : maybeToList l
 
-emitCode :: Delim -> Text -> Text
+emitCode :: Delimiter -> Text -> Text
 emitCode Bird l = emitBird l
 emitCode _    l = l
 
-emitClose :: Delim -> Text
+emitClose :: Delimiter -> Text
 emitClose  Bird                = ""
 emitClose (LaTeX Begin)        = emitClose (LaTeX End)
 emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
 emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
-emitClose  del                 = emitDelim (setLang Nothing del)
+emitClose  del                 = emitDelimiter (setLang Nothing del)
 ```
 Using these simple functions we can easily define the `relit'`
 function.
 
 ```
-relit' :: Style -> Delim -> State -> [(Int, Text)] -> [Text]
+relit' :: Style -> Delimiter -> State -> [(Int, Text)] -> [Text]
 relit' _ _   Nothing    [] = []
 relit' _ ts (Just Bird) [] = emitClose ts : []
 relit' _ _  (Just o)    [] = eof o
@@ -363,7 +363,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Just o   , Just c)                  -> if o `match` c then blockClose else spurious n c
 
   where
-    q'               = isDelim (ss `or` all) l
+    q'               = isDelimiter (ss `or` all) l
     continueWith  r  = relit' (ss `or` doInfer q') ts r ls
     continue         = continueWith q
     blockOpen     l' = emitOpen  ts l' <> continueWith q'
@@ -383,11 +383,11 @@ x  >#< "" = x
 x  >#< y  = x <> " " <> y
 ```
 ```
-eof :: Delim -> a
-eof q = error $ "unexpected EOF; unmatched " <> unpack (emitDelim q)
+eof :: Delimiter -> a
+eof q = error $ "unexpected EOF; unmatched " <> unpack (emitDelimiter q)
 ```
 ```
-spurious :: Int -> Delim -> a
-spurious n q = error $ "at line " <> show n <> ": spurious " <> unpack (emitDelim q)
+spurious :: Int -> Delimiter -> a
+spurious n q = error $ "at line " <> show n <> ": spurious " <> unpack (emitDelimiter q)
 ```
 
