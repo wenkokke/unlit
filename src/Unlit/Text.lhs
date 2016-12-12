@@ -1,4 +1,4 @@
-> {-# LANGUAGE OverloadedStrings, CPP #-}
+> {-# LANGUAGE OverloadedStrings #-}
 > module Unlit.Text (
 >   unlit, relit
 >   , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
