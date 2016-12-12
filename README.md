@@ -57,13 +57,13 @@ following instance.
 emitDelimiter :: Delimiter -> Text
 emitDelimiter (LaTeX Begin)     = "\\begin{code}"
 emitDelimiter (LaTeX End)       = "\\end{code}"
-emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" >#< fromMaybe "" l
+emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" <+> fromMaybe "" l
 emitDelimiter (OrgMode End _)   = "#+END_SRC"
 emitDelimiter  Bird             = ">"
-emitDelimiter (Jekyll Begin l)  = "{% highlight " >#< fromMaybe "" l >#< " %}"
+emitDelimiter (Jekyll Begin l)  = "{% highlight " <+> fromMaybe "" l <+> " %}"
 emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
-emitDelimiter (TildeFence l)    = "~~~" >#< fromMaybe "" l
-emitDelimiter (BacktickFence l) = "```" >#< fromMaybe "" l
+emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
+emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
 ```
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
@@ -389,12 +389,12 @@ Helper functions
 ================
 
 ``` haskell
-infixr 5 >#<
+infixr 5 <+>
 ```
 ``` haskell
-(>#<) :: Text -> Text -> Text
-"" >#< y  = y
-x  >#< "" = x
-x  >#< y  = x <> " " <> y
+(<+>) :: Text -> Text -> Text
+"" <+> y  = y
+x  <+> "" = x
+x  <+> y  = x <> " " <> y
 ```
 

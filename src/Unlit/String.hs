@@ -36,13 +36,13 @@ type Lang = Maybe String
 emitDelimiter :: Delimiter -> String
 emitDelimiter (LaTeX Begin)     = "\\begin{code}"
 emitDelimiter (LaTeX End)       = "\\end{code}"
-emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" >#< fromMaybe "" l
+emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" <+> fromMaybe "" l
 emitDelimiter (OrgMode End _)   = "#+END_SRC"
 emitDelimiter  Bird             = ">"
-emitDelimiter (Jekyll Begin l)  = "{% highlight " >#< fromMaybe "" l >#< " %}"
+emitDelimiter (Jekyll Begin l)  = "{% highlight " <+> fromMaybe "" l <+> " %}"
 emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
-emitDelimiter (TildeFence l)    = "~~~" >#< fromMaybe "" l
-emitDelimiter (BacktickFence l) = "```" >#< fromMaybe "" l
+emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
+emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
 
 type Recogniser = String -> Maybe Delimiter
 
@@ -246,10 +246,10 @@ showError :: Error -> String
 showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
 showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious " <> emitDelimiter q
 
-infixr 5 >#<
+infixr 5 <+>
 
-(>#<) :: String -> String -> String
-"" >#< y  = y
-x  >#< "" = x
-x  >#< y  = x <> " " <> y
+(<+>) :: String -> String -> String
+"" <+> y  = y
+x  <+> "" = x
+x  <+> y  = x <> " " <> y
 
