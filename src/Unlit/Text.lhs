@@ -118,24 +118,24 @@ string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
 > isTildeFence :: Lang -> Recogniser
-> isTildeFence lang l =
->   if "~~~" `isPrefixOf` stripStart l then
->     if maybe True (`isInfixOf` l) lang then
->       Just $ TildeFence lang
->     else
->       Just $ TildeFence Nothing
->   else
->     Nothing
+> isTildeFence lang l
+>   | "~~~" `isPrefixOf` stripStart l =
+>     Just $ TildeFence $
+>       if maybe True (`isInfixOf` l) lang then
+>         lang
+>       else
+>         Nothing
+>   | otherwise = Nothing
 
 > isBacktickFence :: Lang -> Recogniser
-> isBacktickFence lang l =
->   if "```" `isPrefixOf` stripStart l then
->     if maybe True (`isInfixOf` l) lang then
->       Just $ TildeFence lang
->     else
->       Just $ TildeFence Nothing
->   else
->     Nothing
+> isBacktickFence lang l
+>   | "```" `isPrefixOf` stripStart l =
+>     Just $ TildeFence $
+>       if maybe True (`isInfixOf` l) lang then
+>         lang
+>        else
+>          Nothing
+>   | otherwise = Nothing
 
 In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
