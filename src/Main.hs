@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Control.Monad (when)
 import           Data.Char (toLower)
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -10,7 +9,6 @@ import           Data.Version (showVersion)
 import           Paths_unlit (version)
 import           Prelude hiding (all)
 import           System.Console.GetOpt (OptDescr(..),ArgDescr(..),ArgOrder(..),usageInfo,getOpt)
-import           System.Directory (doesFileExist)
 import           System.Environment (getArgs,getProgName)
 import           System.Exit (exitSuccess)
 import           System.IO (hPutStrLn,stderr)
@@ -91,7 +89,7 @@ options =
 
   , Option [] ["help"]
     (NoArg  (\_ -> do
-    	      prg <- getProgName
+              prg <- getProgName
               hPutStrLn stderr (usageInfo prg options)
               args <- getArgs
               print args
@@ -110,7 +108,7 @@ main = do
   args <- getArgs
 
   -- use my own calling conventions
-  let (actions, nonOptions, errors) = getOpt Permute options args
+  let (actions, nonOptions, _errors) = getOpt Permute options args
   opts <- foldl (>>=) (return defaultOptions) actions
   let Options { optSourceStyle = ss
               , optTargetStyle = ts

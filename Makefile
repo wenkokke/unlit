@@ -18,19 +18,23 @@ install: src/Main.hs src/Unlit/Text.lhs src/Unlit/String.hs
 	cabal configure
 	cabal install
 
-README.md: src/Unlit/Text.lhs
+README.md: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs \
 	| unlit -t backtickfence -l haskell \
 	| sed '1i [![Build Status](https://travis-ci.org/pepijnkokke/unlit.png?branch=master)](https://travis-ci.org/pepijnkokke/unlit)' \
         > README.md
 
-src/Unlit/String.hs: src/Unlit/Text.lhs
+src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs                                              \
 	| unlit -f bird -t code                                             \
-	| sed '7d;14d;15d'                                                 \
-	| sed 's/Text/String/g;s/unpack/id/g;s/pack/id/g'                  \
-	| sed '7i import Prelude hiding \(all, or\)'                       \
-	| sed '8i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
+	| sed '13d;14d'                                                     \
+	| sed 's/Text/String/g;s/unpack//g'								                  \
+	| sed '13i import Prelude hiding \(all, or\)'                        \
+	| sed '14i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
+	| sed '15i import Data.Char \(isSpace\)'                      \
+	| sed '16i stripStart, stripEnd :: String -> String'  				\
+	| sed '17i stripStart = dropWhile isSpace'  									\
+  | sed '18i stripEnd = dropWhileEnd isSpace'										\
 	> src/Unlit/String.hs
 
 .PHONY: test dist build install
