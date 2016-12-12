@@ -4,7 +4,7 @@
 module Unlit.Text (
   unlit, relit
   , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
-  , Lang, forLang, WhitespaceMode(..)
+  , Lang, setLang, WhitespaceMode(..)
   , Error(..), showError
 ) where
 ```
@@ -34,7 +34,7 @@ data Delimiter
   | BacktickFence Lang
   deriving (Eq, Show)
 ```
-Some of these code blocks need to  carry around additional information.
+Some of these code blocks need to carry around additional information.
 For instance, LaTex code blocks use distinct opening and closing tags.
 
 ``` haskell
@@ -43,15 +43,15 @@ data BeginEnd
   | End
   deriving (Eq, Show)
 ```
-On the other hand, Markdown-style fenced code blocks can be annotated
+On the other hand, Markdown-style fenced code blocks may be annotated
 with all sorts of information. Most prominently, their programming
 language.
 
 ``` haskell
 type Lang = Maybe Text
 ```
-In order to properly show these code blocks, we will define the
-following instance.
+In order to emit these code blocks, we will define the
+following function.
 
 ``` haskell
 emitDelimiter :: Delimiter -> Text
@@ -100,7 +100,7 @@ isBird :: Recogniser
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 ```
 Due to this definition, whenever we strip a bird tag, in normal
-whitespace modes we also remove a the first space following it.
+whitespace modes we also remove the first space following it.
 
 ``` haskell
 stripBird :: Text -> Text
@@ -207,17 +207,19 @@ markdown         = bird <> tildefence <> backtickfence
 all              = latex <> markdown
 infer            = []
 ```
+It is possible to set the language of the source styles using the following function.
+
 ``` haskell
-forLang :: Lang -> Style -> Style
-forLang = map . setLang
+setLang :: Lang -> Style -> Style
+setLang = map . setLang'
 ```
 ``` haskell
-setLang :: Lang -> Delimiter -> Delimiter
-setLang lang (TildeFence _)       = TildeFence lang
-setLang lang (BacktickFence _)    = BacktickFence lang
-setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
-setLang lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
-setLang _     d                   = d
+setLang' :: Lang -> Delimiter -> Delimiter
+setLang' lang (TildeFence _)       = TildeFence lang
+setLang' lang (BacktickFence _)    = BacktickFence lang
+setLang' lang (OrgMode beginEnd _) = OrgMode beginEnd lang
+setLang' lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
+setLang' _     d                   = d
 ```
 Additionally, when the source style is empty, the program will
 attempt to guess the style based on the first delimiter it
@@ -312,7 +314,7 @@ relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
 Again, we will interpret the helper function `relit'` as an
 automaton, which remembers the current state. However, we now also
 need a function which can emit code blocks in a certain style. For
-this purpose we will define a triple of functions.
+this purpose we will define a few functions.
 
 TODO: Currently, if a delimiter is indented, running `relit` will remove this
       indentation. This is obviously an error, however changing it would require
@@ -339,7 +341,7 @@ emitClose  Bird                = ""
 emitClose (LaTeX Begin)        = emitClose (LaTeX End)
 emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
 emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
-emitClose  del                 = emitDelimiter (setLang Nothing del)
+emitClose  del                 = emitDelimiter (setLang' Nothing del)
 ```
 Using these simple functions we can easily define the `relit'`
 function.
@@ -374,12 +376,16 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
 Error handling
 ==============
 
+In case of an error both `unlit' and `relit' return a value of the datatype `Error'.
+
 ``` haskell
 data Error
   = SpuriousDelimiter Int Delimiter
   | UnexpectedEnd     Delimiter
   deriving (Eq, Show)
 ```
+We can get a text representation of the error using `showError'.
+
 ``` haskell
 showError :: Error -> Text
 showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q

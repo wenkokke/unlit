@@ -1,7 +1,7 @@
 module Unlit.String (
   unlit, relit
   , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
-  , Lang, forLang, WhitespaceMode(..)
+  , Lang, setLang, WhitespaceMode(..)
   , Error(..), showError
 ) where
 
@@ -129,15 +129,15 @@ markdown         = bird <> tildefence <> backtickfence
 all              = latex <> markdown
 infer            = []
 
-forLang :: Lang -> Style -> Style
-forLang = map . setLang
+setLang :: Lang -> Style -> Style
+setLang = map . setLang'
 
-setLang :: Lang -> Delimiter -> Delimiter
-setLang lang (TildeFence _)       = TildeFence lang
-setLang lang (BacktickFence _)    = BacktickFence lang
-setLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
-setLang lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
-setLang _     d                   = d
+setLang' :: Lang -> Delimiter -> Delimiter
+setLang' lang (TildeFence _)       = TildeFence lang
+setLang' lang (BacktickFence _)    = BacktickFence lang
+setLang' lang (OrgMode beginEnd _) = OrgMode beginEnd lang
+setLang' lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
+setLang' _     d                   = d
 
 inferred :: Maybe Delimiter -> Style
 inferred  Nothing             = []
@@ -209,7 +209,7 @@ emitClose  Bird                = ""
 emitClose (LaTeX Begin)        = emitClose (LaTeX End)
 emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
 emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
-emitClose  del                 = emitDelimiter (setLang Nothing del)
+emitClose  del                 = emitDelimiter (setLang' Nothing del)
 
 relit' :: Style -> Delimiter -> State -> [(Int, String)] -> Either Error [String]
 relit' _ _   Nothing    [] = Right []
