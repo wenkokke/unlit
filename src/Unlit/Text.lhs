@@ -250,9 +250,9 @@ With this, the signature of `unlit'` becomes:
 >   (Nothing  , Just Bird)               -> open       $ lineIfKeepIndent <> [stripBird' ws l]
 >   (Just Bird, Just Bird)               -> continue   $                     [stripBird' ws l]
 >   (Just Bird, Nothing)                 -> close      $ lineIfKeepAll
->   (Nothing  , Just (LaTeX End))        -> Left $ SpuriousDelimiter n $ LaTeX End
->   (Nothing  , Just (Jekyll End lang))  -> Left $ SpuriousDelimiter n $ Jekyll End lang
->   (Nothing  , Just (OrgMode End lang)) -> Left $ SpuriousDelimiter n $ OrgMode End lang
+>   (Nothing  , Just (LaTeX End))        -> Left       $ SpuriousDelimiter n $ LaTeX End
+>   (Nothing  , Just (Jekyll End lang))  -> Left       $ SpuriousDelimiter n $ Jekyll End lang
+>   (Nothing  , Just (OrgMode End lang)) -> Left       $ SpuriousDelimiter n $ OrgMode End lang
 >   (Nothing  , Just _o)                 -> open       $ lineIfKeepAll <> lineIfKeepIndent
 >   (Just _o  , Nothing)                 -> continue   $ [l]
 >   (Just _o  , Just Bird)               -> continue   $ [l]
@@ -327,9 +327,9 @@ function.
 >   (Nothing  , Just Bird)               -> blockOpen     $ Just (stripBird l)
 >   (Just Bird, Just Bird)               -> blockContinue $       stripBird l
 >   (Just Bird, Nothing)                 -> blockClose
->   (Nothing  , Just (LaTeX End))        -> Left $ SpuriousDelimiter n $ LaTeX End
->   (Nothing  , Just (Jekyll End lang))  -> Left $ SpuriousDelimiter n $ Jekyll End lang
->   (Nothing  , Just (OrgMode End lang)) -> Left $ SpuriousDelimiter n $ OrgMode End lang
+>   (Nothing  , Just (LaTeX End))        -> Left          $ SpuriousDelimiter n $ LaTeX End
+>   (Nothing  , Just (Jekyll End lang))  -> Left          $ SpuriousDelimiter n $ Jekyll End lang
+>   (Nothing  , Just (OrgMode End lang)) -> Left          $ SpuriousDelimiter n $ OrgMode End lang
 >   (Nothing  , Just _o)                 -> blockOpen     $ Nothing
 >   (Just _o  , Nothing)                 -> blockContinue $ l
 >   (Just _o  , Just Bird)               -> (l :) <$> continue
