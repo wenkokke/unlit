@@ -1,3 +1,6 @@
+test/ghcunlit
+stack.yaml
+.stack-work
 dist
 cabal-dev
 *.o

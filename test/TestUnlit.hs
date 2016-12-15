@@ -9,9 +9,9 @@ import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode)
 
 testdir, ghcUnlit, myUnlit :: String
-testdir  = "/Users/pepijn/Projects/unlit/test/ghc"
-ghcUnlit = "/Users/pepijn/Projects/unlit/test/ghcunlit"
-myUnlit  = "/Users/pepijn/Library/Haskell/bin/unlit"
+testdir  = "test/ghc"
+ghcUnlit = "test/ghcunlit"
+myUnlit  = "unlit"
 
 runGhcUnlit :: String -> IO String
 runGhcUnlit ifile = do
