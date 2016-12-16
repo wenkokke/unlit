@@ -12,11 +12,12 @@ import Data.Maybe (fromMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Prelude hiding (all, or)
 import Data.List (isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd)
-import Data.Char (isSpace)
+import qualified Data.Char as Char
 
-stripStart, stripEnd :: String -> String
-stripStart = dropWhile isSpace
-stripEnd = dropWhileEnd isSpace
+stripStart, stripEnd, toLower :: String -> String
+stripStart = dropWhile Char.isSpace
+stripEnd   = dropWhileEnd Char.isSpace
+toLower    = map Char.toLower
 
 data Delimiter
   = LaTeX         BeginEnd
@@ -39,6 +40,10 @@ isBegin (Jekyll  Begin _) = True
 isBegin  _                = False
 
 type Lang = Maybe String
+
+containsLang :: String -> Lang -> Bool
+containsLang _ Nothing = True
+containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
 
 emitDelimiter :: Delimiter -> String
 emitDelimiter (LaTeX Begin)     = "\\begin{code}"
@@ -68,7 +73,7 @@ isLaTeX l
 isOrgMode :: Lang -> Recogniser
 isOrgMode lang l
   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
-    && maybe True (`isInfixOf` l) lang      = Just $ OrgMode Begin lang
+    && l `containsLang` lang                = Just $ OrgMode Begin lang
   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
   | otherwise = Nothing
 
@@ -85,7 +90,7 @@ stripBird' KeepIndent l = drop 2 l
 isJekyll :: Lang -> Recogniser
 isJekyll lang l
   | "{% highlight" `isPrefixOf` stripStart l
-    && maybe True (`isInfixOf` l) lang
+    && l `containsLang` lang
     && "%}" `isSuffixOf` stripEnd l     = Just $ Jekyll Begin lang
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
@@ -93,11 +98,7 @@ isJekyll lang l
 isFence :: String -> Lang -> Recogniser
 isFence fence lang l
   | fence `isPrefixOf` stripStart l =
-    Just $ TildeFence $
-      if maybe True (`isInfixOf` l) lang then
-        lang
-      else
-        Nothing
+    Just $ TildeFence $ bool Nothing lang (l `containsLang` lang)
   | otherwise = Nothing
 
 isDelimiter :: Style -> Recogniser
