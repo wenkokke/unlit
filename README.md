@@ -277,7 +277,9 @@ With this, the signature of `unlit'` becomes:
 
 ``` haskell
 unlit' :: WhitespaceMode -> Style -> State -> [(Int, Text)] -> Either Error [Text]
-unlit' _ _ _ [] = Right []
+unlit' _ _  Nothing    [] = Right []
+unlit' _ _ (Just Bird) [] = Right []
+unlit' _ _ (Just o)    [] = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)   -> continue $ lineIfKeepAll

@@ -168,7 +168,9 @@ unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 type State = Maybe Delimiter
 
 unlit' :: WhitespaceMode -> Style -> State -> [(Int, String)] -> Either Error [String]
-unlit' _ _ _ [] = Right []
+unlit' _ _  Nothing    [] = Right []
+unlit' _ _ (Just Bird) [] = Right []
+unlit' _ _ (Just o)    [] = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)   -> continue $ lineIfKeepAll
