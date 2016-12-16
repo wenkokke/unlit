@@ -45,10 +45,10 @@ data BeginEnd
 ```
 ``` haskell
 isBegin :: Delimiter -> Bool
-isBegin (LaTeX   x  ) = x == Begin
-isBegin (OrgMode x _) = x == Begin
-isBegin (Jekyll  x _) = x == Begin
-isBegin  _            = False
+isBegin (LaTeX   Begin  ) = True
+isBegin (OrgMode Begin _) = True
+isBegin (Jekyll  Begin _) = True
+isBegin  _                = False
 ```
 On the other hand, Markdown-style fenced code blocks may be annotated
 with all sorts of information. Most prominently, their programming
@@ -71,6 +71,13 @@ emitDelimiter (Jekyll Begin l)  = "{% highlight " <+> fromMaybe "" l <+> " %}"
 emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
 emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
 emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
+```
+``` haskell
+infixr 5 <+>
+(<+>) :: Text -> Text -> Text
+"" <+> y  = y
+x  <+> "" = x
+x  <+> y  = x <> " " <> y
 ```
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
@@ -277,9 +284,9 @@ With this, the signature of `unlit'` becomes:
 
 ``` haskell
 unlit' :: WhitespaceMode -> Style -> State -> [(Int, Text)] -> Either Error [Text]
-unlit' _ _  Nothing    [] = Right []
-unlit' _ _ (Just Bird) [] = Right []
-unlit' _ _ (Just o)    [] = Left $ UnexpectedEnd o
+unlit' _ _  Nothing    []  = Right []
+unlit' _ _ (Just Bird) []  = Right []
+unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)   -> continue $ lineIfKeepAll
@@ -403,19 +410,7 @@ We can get a text representation of the error using `showError'.
 
 ``` haskell
 showError :: Error -> Text
-showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
-showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious " <> emitDelimiter q
-```
-Helper functions
-================
-
-``` haskell
-infixr 5 <+>
-```
-``` haskell
-(<+>) :: Text -> Text -> Text
-"" <+> y  = y
-x  <+> "" = x
-x  <+> y  = x <> " " <> y
+showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
+showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious "  <> emitDelimiter q
 ```
 

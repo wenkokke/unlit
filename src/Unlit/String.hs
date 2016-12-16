@@ -33,10 +33,10 @@ data BeginEnd
   deriving (Eq, Show)
 
 isBegin :: Delimiter -> Bool
-isBegin (LaTeX   x  ) = x == Begin
-isBegin (OrgMode x _) = x == Begin
-isBegin (Jekyll  x _) = x == Begin
-isBegin  _            = False
+isBegin (LaTeX   Begin  ) = True
+isBegin (OrgMode Begin _) = True
+isBegin (Jekyll  Begin _) = True
+isBegin  _                = False
 
 type Lang = Maybe String
 
@@ -50,6 +50,12 @@ emitDelimiter (Jekyll Begin l)  = "{% highlight " <+> fromMaybe "" l <+> " %}"
 emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
 emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
 emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
+
+infixr 5 <+>
+(<+>) :: String -> String -> String
+"" <+> y  = y
+x  <+> "" = x
+x  <+> y  = x <> " " <> y
 
 type Recogniser = String -> Maybe Delimiter
 
@@ -168,9 +174,9 @@ unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 type State = Maybe Delimiter
 
 unlit' :: WhitespaceMode -> Style -> State -> [(Int, String)] -> Either Error [String]
-unlit' _ _  Nothing    [] = Right []
-unlit' _ _ (Just Bird) [] = Right []
-unlit' _ _ (Just o)    [] = Left $ UnexpectedEnd o
+unlit' _ _  Nothing    []  = Right []
+unlit' _ _ (Just Bird) []  = Right []
+unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)   -> continue $ lineIfKeepAll
@@ -258,13 +264,6 @@ data Error
   deriving (Eq, Show)
 
 showError :: Error -> String
-showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
-showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious " <> emitDelimiter q
-
-infixr 5 <+>
-
-(<+>) :: String -> String -> String
-"" <+> y  = y
-x  <+> "" = x
-x  <+> y  = x <> " " <> y
+showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
+showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious "  <> emitDelimiter q
 
