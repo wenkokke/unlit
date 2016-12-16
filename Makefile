@@ -27,15 +27,15 @@ README.md: Makefile src/Unlit/Text.lhs
 src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs                                                            \
 	| unlit -f bird -t code                                                           \
-	| sed '1d;2d;15d;16d'                                                             \
+	| sed '1d;2d;17d;18d'                                                             \
 	| sed 's/Text/String/g;s/pack//g'                                                 \
-	| sed '13i import Prelude hiding \(all, or\)'                                     \
-	| sed '14i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
-	| sed '15i import qualified Data.Char as Char\n'                                  \
-	| sed '17i stripStart, stripEnd, toLower :: String -> String'                     \
-	| sed '18i stripStart = dropWhile Char.isSpace'                                   \
-	| sed '19i stripEnd   = dropWhileEnd Char.isSpace'                                \
-	| sed '20i toLower    = map Char.toLower'                                         \
+	| sed '15i import Prelude hiding \(all, or\)'                                     \
+	| sed '16i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
+	| sed '17i import qualified Data.Char as Char\n'                                  \
+	| sed '19i stripStart, stripEnd, toLower :: String -> String'                     \
+	| sed '20i stripStart = dropWhile Char.isSpace'                                   \
+	| sed '21i stripEnd   = dropWhileEnd Char.isSpace'                                \
+	| sed '22i toLower    = map Char.toLower'                                         \
 	> src/Unlit/String.hs
 
 .PHONY: test dist build install
