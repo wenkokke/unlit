@@ -3,8 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Unlit.Text (
   unlit, relit
-  , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
-  , Lang, setLang, WhitespaceMode(..)
+  , Style, parseStyle
+  , WhitespaceMode(..), parseWhitespaceMode
+  , all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
+  , Lang, setLang
   , Error(..), showError
 ) where
 ```
@@ -123,12 +125,12 @@ whitespace modes we also remove the first space following it.
 
 ``` haskell
 stripBird :: Text -> Text
-stripBird = stripBird' KeepIndent
+stripBird = stripBird' WhitespaceIndent
 ```
 ``` haskell
 stripBird' :: WhitespaceMode -> Text -> Text
-stripBird' KeepAll    l = " " <> drop 1 l
-stripBird' KeepIndent l = drop 2 l
+stripBird' WhitespaceAll    l = " " <> drop 1 l
+stripBird' WhitespaceIndent l = drop 2 l
 ```
 Then we have Jekyll Liquid code blocks.
 
@@ -198,18 +200,34 @@ The options for source styles are as follows:
 
 ``` haskell
 type Style = [Delimiter]
-
-bird, latex, orgmode, haskell, jekyll, tildefence, backtickfence, markdown, all, infer :: Style
-bird          = [Bird]
-latex         = [LaTeX Begin, LaTeX End]
-orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
-haskell       = latex <> bird
-jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
-tildefence    = [TildeFence Nothing]
-backtickfence = [BacktickFence Nothing]
-markdown      = bird <> tildefence <> backtickfence
+```
+``` haskell
+all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
 all           = latex <> markdown
+backtickfence = [BacktickFence Nothing]
+bird          = [Bird]
+haskell       = latex <> bird
 infer         = []
+jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
+latex         = [LaTeX Begin, LaTeX End]
+markdown      = bird <> tildefence <> backtickfence
+orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
+tildefence    = [TildeFence Nothing]
+```
+``` haskell
+parseStyle :: Text -> Maybe Style
+parseStyle s = case toLower s of
+  "all"           -> Just all
+  "backtickfence" -> Just backtickfence
+  "bird"          -> Just bird
+  "haskell"       -> Just haskell
+  "infer"         -> Just infer
+  "jekyll"        -> Just jekyll
+  "latex"         -> Just latex
+  "markdown"      -> Just markdown
+  "orgmode"       -> Just orgmode
+  "tildefence"    -> Just tildefence
+  _               -> Nothing
 ```
 It is possible to set the language of the source styles using the following function.
 
@@ -243,8 +261,15 @@ different whitespace modes. For now, these are:
 
 ``` haskell
 data WhitespaceMode
-  = KeepIndent -- ^ keeps only indentations
-  | KeepAll    -- ^ keeps all lines and whitespace
+  = WhitespaceIndent -- ^ keeps only indentations
+  | WhitespaceAll    -- ^ keeps all lines and whitespace
+```
+``` haskell
+parseWhitespaceMode :: Text -> Maybe WhitespaceMode
+parseWhitespaceMode s = case toLower s of
+  "all"    -> Just WhitespaceAll
+  "indent" -> Just WhitespaceIndent
+  _        -> Nothing
 ```
 We would like to combine the inferred style with current styles as
 one would combine maybe values using the alternative operator
@@ -279,20 +304,20 @@ unlit' _ _ (Just Bird) []  = Right []
 unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)   -> continue $ lineIfKeepAll
+  (Nothing  , Nothing)   -> continue $ lineIfWsAll
 
-  (Just Bird, Nothing)   -> close    $ lineIfKeepAll
+  (Just Bird, Nothing)   -> close    $ lineIfWsAll
   (Just _o  , Nothing)   -> continue $ [l]
 
-  (Nothing  , Just Bird) -> open     $ lineIfKeepIndent <> [stripBird' ws l]
+  (Nothing  , Just Bird) -> open     $ lineIfWsIndent <> [stripBird' ws l]
   (Nothing  , Just c)
-     | isBegin c         -> open     $ lineIfKeepAll <> lineIfKeepIndent
+     | isBegin c         -> open     $ lineIfWsAll <> lineIfWsIndent
      | otherwise         -> Left     $ SpuriousDelimiter n c
 
   (Just Bird, Just Bird) -> continue $ [stripBird' ws l]
   (Just _o  , Just Bird) -> continue $ [l]
   (Just o   , Just c)
-     | o `match` c       -> close    $ lineIfKeepAll
+     | o `match` c       -> close    $ lineIfWsAll
      | otherwise         -> Left     $ SpuriousDelimiter n c
 
   where
@@ -301,8 +326,8 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     open              = continueWith q'
     continue          = continueWith q
     close             = continueWith Nothing
-    lineIfKeepAll     = case ws of KeepAll    -> [""]; _ -> []
-    lineIfKeepIndent  = case ws of KeepIndent -> [""]; _ -> []
+    lineIfWsAll       = case ws of WhitespaceAll    -> [""]; WhitespaceIndent -> []
+    lineIfWsIndent    = case ws of WhitespaceIndent -> [""]; WhitespaceAll -> []
 ```
 What do we want `relit` to do?
 ==============================
