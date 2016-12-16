@@ -171,18 +171,21 @@ unlit' :: WhitespaceMode -> Style -> State -> [(Int, String)] -> Either Error [S
 unlit' _ _ _ [] = Right []
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)   -> continue   $ lineIfKeepAll
-  (Nothing  , Just Bird) -> open       $ lineIfKeepIndent <> [stripBird' ws l]
-  (Just Bird, Just Bird) -> continue   $                     [stripBird' ws l]
-  (Just Bird, Nothing)   -> close      $ lineIfKeepAll
+  (Nothing  , Nothing)   -> continue $ lineIfKeepAll
+
+  (Just Bird, Nothing)   -> close    $ lineIfKeepAll
+  (Just _o  , Nothing)   -> continue $ [l]
+
+  (Nothing  , Just Bird) -> open     $ lineIfKeepIndent <> [stripBird' ws l]
   (Nothing  , Just c)
-     | isBegin c         -> open $ lineIfKeepAll <> lineIfKeepIndent
-     | otherwise         -> Left $ SpuriousDelimiter n c
-  (Just _o  , Nothing)   -> continue   $ [l]
-  (Just _o  , Just Bird) -> continue   $ [l]
+     | isBegin c         -> open     $ lineIfKeepAll <> lineIfKeepIndent
+     | otherwise         -> Left     $ SpuriousDelimiter n c
+
+  (Just Bird, Just Bird) -> continue $ [stripBird' ws l]
+  (Just _o  , Just Bird) -> continue $ [l]
   (Just o   , Just c)
-     | o `match` c       -> close $ lineIfKeepAll
-     | otherwise         -> Left $ SpuriousDelimiter n c
+     | o `match` c       -> close    $ lineIfKeepAll
+     | otherwise         -> Left     $ SpuriousDelimiter n c
 
   where
     q'                = isDelimiter (ss `or` all) l
@@ -224,13 +227,16 @@ relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
   (Nothing  , Nothing)   -> (l :) <$> continue
-  (Nothing  , Just Bird) -> blockOpen     $ Just (stripBird l)
-  (Just Bird, Just Bird) -> blockContinue $       stripBird l
-  (Just Bird, Nothing)   -> blockClose
+
+  (Nothing  , Just Bird) -> blockOpen $ Just (stripBird l)
   (Nothing  , Just c)
     | isBegin c          -> blockOpen Nothing
     | otherwise          -> Left $ SpuriousDelimiter n c
+
+  (Just Bird, Nothing)   -> blockClose
   (Just _o  , Nothing)   -> blockContinue $ l
+
+  (Just Bird, Just Bird) -> blockContinue $ stripBird l
   (Just _o  , Just Bird) -> (l :) <$> continue
   (Just o   , Just c)
     | o `match` c        -> blockClose
