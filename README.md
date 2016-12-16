@@ -43,6 +43,13 @@ data BeginEnd
   | End
   deriving (Eq, Show)
 ```
+``` haskell
+isBegin :: Delimiter -> Bool
+isBegin (LaTeX   x  ) = x == Begin
+isBegin (OrgMode x _) = x == Begin
+isBegin (Jekyll  x _) = x == Begin
+isBegin  _            = False
+```
 On the other hand, Markdown-style fenced code blocks may be annotated
 with all sorts of information. Most prominently, their programming
 language.
@@ -277,10 +284,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
   (Nothing  , Just Bird)               -> open       $ lineIfKeepIndent <> [stripBird' ws l]
   (Just Bird, Just Bird)               -> continue   $                     [stripBird' ws l]
   (Just Bird, Nothing)                 -> close      $ lineIfKeepAll
-  (Nothing  , Just c@(LaTeX End))      -> Left       $ SpuriousDelimiter n c
-  (Nothing  , Just c@(Jekyll End _))   -> Left       $ SpuriousDelimiter n c
-  (Nothing  , Just c@(OrgMode End _))  -> Left       $ SpuriousDelimiter n c
-  (Nothing  , Just _o)                 -> open       $ lineIfKeepAll <> lineIfKeepIndent
+  (Nothing  , Just c)                  -> if isBegin c then open $ lineIfKeepAll <> lineIfKeepIndent else Left $ SpuriousDelimiter n c
   (Just _o  , Nothing)                 -> continue   $ [l]
   (Just _o  , Just Bird)               -> continue   $ [l]
   (Just o   , Just c)                  -> if o `match` c then close $ lineIfKeepAll else Left $ SpuriousDelimiter n c
@@ -355,10 +359,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Nothing  , Just Bird)               -> blockOpen     $ Just (stripBird l)
   (Just Bird, Just Bird)               -> blockContinue $       stripBird l
   (Just Bird, Nothing)                 -> blockClose
-  (Nothing  , Just c@(LaTeX End))      -> Left          $ SpuriousDelimiter n c
-  (Nothing  , Just c@(Jekyll End _))   -> Left          $ SpuriousDelimiter n c
-  (Nothing  , Just c@(OrgMode End _))  -> Left          $ SpuriousDelimiter n c
-  (Nothing  , Just _o)                 -> blockOpen     $ Nothing
+  (Nothing  , Just c)                  -> if isBegin c then blockOpen Nothing else Left $ SpuriousDelimiter n c
   (Just _o  , Nothing)                 -> blockContinue $ l
   (Just _o  , Just Bird)               -> (l :) <$> continue
   (Just o   , Just c)                  -> if o `match` c then blockClose else Left $ SpuriousDelimiter n c
