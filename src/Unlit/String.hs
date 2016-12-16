@@ -90,24 +90,14 @@ isJekyll lang l
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 
-isTildeFence :: Lang -> Recogniser
-isTildeFence lang l
-  | "~~~" `isPrefixOf` stripStart l =
+isFence :: String -> Lang -> Recogniser
+isFence fence lang l
+  | fence `isPrefixOf` stripStart l =
     Just $ TildeFence $
       if maybe True (`isInfixOf` l) lang then
         lang
       else
         Nothing
-  | otherwise = Nothing
-
-isBacktickFence :: Lang -> Recogniser
-isBacktickFence lang l
-  | "```" `isPrefixOf` stripStart l =
-    Just $ TildeFence $
-      if maybe True (`isInfixOf` l) lang then
-        lang
-       else
-         Nothing
   | otherwise = Nothing
 
 isDelimiter :: Style -> Recogniser
@@ -116,8 +106,8 @@ isDelimiter ds l = asum (map go ds)
     go (LaTeX _)            = isLaTeX l
     go  Bird                = isBird l
     go (Jekyll _ lang)      = isJekyll lang l
-    go (TildeFence lang)    = isTildeFence lang l
-    go (BacktickFence lang) = isBacktickFence lang l
+    go (TildeFence lang)    = isFence "~~~" lang l
+    go (BacktickFence lang) = isFence "```" lang l
     go (OrgMode _ lang)     = isOrgMode lang l
 
 match :: Delimiter -> Delimiter -> Bool
