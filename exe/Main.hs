@@ -30,7 +30,7 @@ defaultOptions = Options
   , optTargetStyle = []
   , optInputFile   = T.getContents
   , optOutputFile  = T.putStrLn
-  , optWsMode      = WhitespaceIndent
+  , optWsMode      = WsKeepIndent
   , optGhc         = False
   , optLanguage    = Nothing
   }

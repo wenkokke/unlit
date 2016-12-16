@@ -83,11 +83,11 @@ isBird :: Recogniser
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 
 stripBird :: String -> String
-stripBird = stripBird' WhitespaceIndent
+stripBird = stripBird' WsKeepIndent
 
 stripBird' :: WhitespaceMode -> String -> String
-stripBird' WhitespaceAll    l = " " <> drop 1 l
-stripBird' WhitespaceIndent l = drop 2 l
+stripBird' WsKeepAll    l = " " <> drop 1 l
+stripBird' WsKeepIndent l = drop 2 l
 
 isJekyll :: Lang -> Recogniser
 isJekyll lang l
@@ -167,13 +167,13 @@ inferred (Just (OrgMode _ _)) = orgmode
 inferred (Just _)             = markdown
 
 data WhitespaceMode
-  = WhitespaceIndent -- ^ keeps only indentations
-  | WhitespaceAll    -- ^ keeps all lines and whitespace
+  = WsKeepIndent -- ^ keeps only indentations
+  | WsKeepAll    -- ^ keeps all lines and whitespace
 
 parseWhitespaceMode :: String -> Maybe WhitespaceMode
 parseWhitespaceMode s = case toLower s of
-  "all"    -> Just WhitespaceAll
-  "indent" -> Just WhitespaceIndent
+  "all"    -> Just WsKeepAll
+  "indent" -> Just WsKeepIndent
   _        -> Nothing
 
 or :: [a] -> [a] -> [a]
@@ -192,20 +192,20 @@ unlit' _ _ (Just Bird) []  = Right []
 unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)   -> continue $ lineIfWsAll
+  (Nothing  , Nothing)   -> continue $ lineIfKeepAll
 
-  (Just Bird, Nothing)   -> close    $ lineIfWsAll
+  (Just Bird, Nothing)   -> close    $ lineIfKeepAll
   (Just _o  , Nothing)   -> continue $ [l]
 
-  (Nothing  , Just Bird) -> open     $ lineIfWsIndent <> [stripBird' ws l]
+  (Nothing  , Just Bird) -> open     $ lineIfKeepIndent <> [stripBird' ws l]
   (Nothing  , Just c)
-     | isBegin c         -> open     $ lineIfWsAll <> lineIfWsIndent
+     | isBegin c         -> open     $ lineIfKeepAll <> lineIfKeepIndent
      | otherwise         -> Left     $ SpuriousDelimiter n c
 
   (Just Bird, Just Bird) -> continue $ [stripBird' ws l]
   (Just _o  , Just Bird) -> continue $ [l]
   (Just o   , Just c)
-     | o `match` c       -> close    $ lineIfWsAll
+     | o `match` c       -> close    $ lineIfKeepAll
      | otherwise         -> Left     $ SpuriousDelimiter n c
 
   where
@@ -214,8 +214,8 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     open              = continueWith q'
     continue          = continueWith q
     close             = continueWith Nothing
-    lineIfWsAll       = case ws of WhitespaceAll    -> [""]; WhitespaceIndent -> []
-    lineIfWsIndent    = case ws of WhitespaceIndent -> [""]; WhitespaceAll -> []
+    lineIfKeepAll     = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
+    lineIfKeepIndent  = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
 
 relit :: Style -> Style -> String -> Either Error String
 relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
