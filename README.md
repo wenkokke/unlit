@@ -146,25 +146,14 @@ string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
 ``` haskell
-isTildeFence :: Lang -> Recogniser
-isTildeFence lang l
-  | "~~~" `isPrefixOf` stripStart l =
+isFence :: Text -> Lang -> Recogniser
+isFence fence lang l
+  | fence `isPrefixOf` stripStart l =
     Just $ TildeFence $
       if maybe True (`isInfixOf` l) lang then
         lang
       else
         Nothing
-  | otherwise = Nothing
-```
-``` haskell
-isBacktickFence :: Lang -> Recogniser
-isBacktickFence lang l
-  | "```" `isPrefixOf` stripStart l =
-    Just $ TildeFence $
-      if maybe True (`isInfixOf` l) lang then
-        lang
-       else
-         Nothing
   | otherwise = Nothing
 ```
 In general, we will also need a function that checks, for a given
@@ -177,8 +166,8 @@ isDelimiter ds l = asum (map go ds)
     go (LaTeX _)            = isLaTeX l
     go  Bird                = isBird l
     go (Jekyll _ lang)      = isJekyll lang l
-    go (TildeFence lang)    = isTildeFence lang l
-    go (BacktickFence lang) = isBacktickFence lang l
+    go (TildeFence lang)    = isFence "~~~" lang l
+    go (BacktickFence lang) = isFence "```" lang l
     go (OrgMode _ lang)     = isOrgMode lang l
 ```
 And, for the styles which use opening and closing brackets, we will
