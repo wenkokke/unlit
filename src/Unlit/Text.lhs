@@ -306,23 +306,22 @@ this purpose we will define a few functions.
 
 TODO: Currently, if a delimiter is indented, running `relit` will remove this
       indentation. This is obviously an error, however changing it would require
-      adding indentation information to all delimiters (which I'll do in the
-      future, together with making a general `isEnd` predicate).
+      adding indentation information to all delimiters.
 
 > emitBird :: Text -> Text
 > emitBird l = "> " <> l
->
+
 > emitOpen :: Delimiter -> Maybe Text -> [Text]
 > emitOpen  Bird              l = "" : map emitBird (maybeToList l)
 > emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
 > emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 > emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
 > emitOpen  del               l = emitDelimiter del : maybeToList l
->
+
 > emitCode :: Delimiter -> Text -> Text
 > emitCode Bird l = emitBird l
 > emitCode _    l = l
->
+
 > emitClose :: Delimiter -> Text
 > emitClose  Bird                = ""
 > emitClose (LaTeX Begin)        = emitClose (LaTeX End)
