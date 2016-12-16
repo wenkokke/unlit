@@ -12,7 +12,7 @@
 > import Data.Maybe (fromMaybe, maybeToList)
 > import Data.Monoid ((<>))
 > import Prelude hiding (all, or, String, unlines, lines, drop)
-> import Data.Text (Text, stripStart, stripEnd, isPrefixOf, isSuffixOf, isInfixOf, unlines, lines, pack, drop)
+> import Data.Text (Text, stripStart, stripEnd, isPrefixOf, isSuffixOf, isInfixOf, unlines, lines, pack, drop, toLower)
 
 What are literate programs?
 ===========================
@@ -49,6 +49,10 @@ with all sorts of information. Most prominently, their programming
 language.
 
 > type Lang = Maybe Text
+
+> containsLang :: Text -> Lang -> Bool
+> containsLang _ Nothing = True
+> containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
 
 In order to emit these code blocks, we will define the
 following function.
@@ -88,7 +92,7 @@ position (since we do not support indented code blocks).
 > isOrgMode :: Lang -> Recogniser
 > isOrgMode lang l
 >   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
->     && maybe True (`isInfixOf` l) lang      = Just $ OrgMode Begin lang
+>     && l `containsLang` lang                = Just $ OrgMode Begin lang
 >   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
 >   | otherwise = Nothing
 
@@ -115,7 +119,7 @@ Then we have Jekyll Liquid code blocks.
 > isJekyll :: Lang -> Recogniser
 > isJekyll lang l
 >   | "{% highlight" `isPrefixOf` stripStart l
->     && maybe True (`isInfixOf` l) lang
+>     && l `containsLang` lang
 >     && "%}" `isSuffixOf` stripEnd l     = Just $ Jekyll Begin lang
 >   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
 >   | otherwise                           = Nothing
@@ -132,11 +136,7 @@ well-formed Markdown.
 > isFence :: Text -> Lang -> Recogniser
 > isFence fence lang l
 >   | fence `isPrefixOf` stripStart l =
->     Just $ TildeFence $
->       if maybe True (`isInfixOf` l) lang then
->         lang
->       else
->         Nothing
+>     Just $ TildeFence $ bool Nothing lang (l `containsLang` lang)
 >   | otherwise = Nothing
 
 In general, we will also need a function that checks, for a given

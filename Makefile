@@ -31,10 +31,11 @@ src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
 	| sed 's/Text/String/g;s/pack//g'                                                 \
 	| sed '13i import Prelude hiding \(all, or\)'                                     \
 	| sed '14i import Data.List \(isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd\)'  \
-	| sed '15i import Data.Char \(isSpace\)\n'                                        \
-	| sed '17i stripStart, stripEnd :: String -> String'                              \
-	| sed '18i stripStart = dropWhile isSpace'                                        \
-	| sed '19i stripEnd = dropWhileEnd isSpace'                                       \
+	| sed '15i import qualified Data.Char as Char\n'                                  \
+	| sed '17i stripStart, stripEnd, toLower :: String -> String'                     \
+	| sed '18i stripStart = dropWhile Char.isSpace'                                   \
+	| sed '19i stripEnd   = dropWhileEnd Char.isSpace'                                \
+	| sed '20i toLower    = map Char.toLower'                                         \
 	> src/Unlit/String.hs
 
 .PHONY: test dist build install
