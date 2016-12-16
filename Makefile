@@ -26,7 +26,7 @@ README.md: Makefile src/Unlit/Text.lhs
 
 src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
 	cat src/Unlit/Text.lhs                                                            \
-	| unlit -f bird -t code                                                           \
+	| unlit -f bird                                                                   \
 	| sed '1d;2d;17d;18d'                                                             \
 	| sed 's/Text/String/g;s/pack//g'                                                 \
 	| sed '15i import Prelude hiding \(all, or\)'                                     \
