@@ -59,7 +59,7 @@ type Lang = Maybe Text
 ```
 ``` haskell
 containsLang :: Text -> Lang -> Bool
-containsLang _ Nothing = True
+containsLang _ Nothing     = True
 containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
 ```
 In order to emit these code blocks, we will define the
@@ -200,16 +200,16 @@ The options for source styles are as follows:
 type Style = [Delimiter]
 
 bird, latex, orgmode, haskell, jekyll, tildefence, backtickfence, markdown, all, infer :: Style
-bird             = [Bird]
-latex            = [LaTeX Begin, LaTeX End]
-orgmode          = [OrgMode Begin Nothing, OrgMode End Nothing]
-haskell          = latex <> bird
-jekyll           = [Jekyll Begin Nothing, Jekyll End Nothing]
-tildefence       = [TildeFence Nothing]
-backtickfence    = [BacktickFence Nothing]
-markdown         = bird <> tildefence <> backtickfence
-all              = latex <> markdown
-infer            = []
+bird          = [Bird]
+latex         = [LaTeX Begin, LaTeX End]
+orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
+haskell       = latex <> bird
+jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
+tildefence    = [TildeFence Nothing]
+backtickfence = [BacktickFence Nothing]
+markdown      = bird <> tildefence <> backtickfence
+all           = latex <> markdown
+infer         = []
 ```
 It is possible to set the language of the source styles using the following function.
 
