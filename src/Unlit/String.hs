@@ -1,7 +1,9 @@
 module Unlit.String (
   unlit, relit
-  , Style, all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
-  , Lang, setLang, WhitespaceMode(..)
+  , Style, parseStyle
+  , WhitespaceMode(..), parseWhitespaceMode
+  , all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
+  , Lang, setLang
   , Error(..), showError
 ) where
 
@@ -12,11 +14,12 @@ import Data.Maybe (fromMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Prelude hiding (all, or)
 import Data.List (isPrefixOf, isInfixOf, isSuffixOf, dropWhileEnd)
-import Data.Char (isSpace)
+import qualified Data.Char as Char
 
-stripStart, stripEnd :: String -> String
-stripStart = dropWhile isSpace
-stripEnd = dropWhileEnd isSpace
+stripStart, stripEnd, toLower :: String -> String
+stripStart = dropWhile Char.isSpace
+stripEnd   = dropWhileEnd Char.isSpace
+toLower    = map Char.toLower
 
 data Delimiter
   = LaTeX         BeginEnd
@@ -32,7 +35,17 @@ data BeginEnd
   | End
   deriving (Eq, Show)
 
+isBegin :: Delimiter -> Bool
+isBegin (LaTeX   Begin  ) = True
+isBegin (OrgMode Begin _) = True
+isBegin (Jekyll  Begin _) = True
+isBegin  _                = False
+
 type Lang = Maybe String
+
+containsLang :: String -> Lang -> Bool
+containsLang _ Nothing     = True
+containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
 
 emitDelimiter :: Delimiter -> String
 emitDelimiter (LaTeX Begin)     = "\\begin{code}"
@@ -45,6 +58,12 @@ emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
 emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
 emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
 
+infixr 5 <+>
+(<+>) :: String -> String -> String
+"" <+> y  = y
+x  <+> "" = x
+x  <+> y  = x <> " " <> y
+
 type Recogniser = String -> Maybe Delimiter
 
 isLaTeX :: Recogniser
@@ -56,7 +75,7 @@ isLaTeX l
 isOrgMode :: Lang -> Recogniser
 isOrgMode lang l
   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
-    && maybe True (`isInfixOf` l) lang      = Just $ OrgMode Begin lang
+    && l `containsLang` lang                = Just $ OrgMode Begin lang
   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
   | otherwise = Nothing
 
@@ -64,38 +83,24 @@ isBird :: Recogniser
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 
 stripBird :: String -> String
-stripBird = stripBird' KeepIndent
+stripBird = stripBird' WsKeepIndent
 
 stripBird' :: WhitespaceMode -> String -> String
-stripBird' KeepAll    l = " " <> drop 1 l
-stripBird' KeepIndent l = drop 2 l
+stripBird' WsKeepAll    l = " " <> drop 1 l
+stripBird' WsKeepIndent l = drop 2 l
 
 isJekyll :: Lang -> Recogniser
 isJekyll lang l
   | "{% highlight" `isPrefixOf` stripStart l
-    && maybe True (`isInfixOf` l) lang
+    && l `containsLang` lang
     && "%}" `isSuffixOf` stripEnd l     = Just $ Jekyll Begin lang
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 
-isTildeFence :: Lang -> Recogniser
-isTildeFence lang l
-  | "~~~" `isPrefixOf` stripStart l =
-    Just $ TildeFence $
-      if maybe True (`isInfixOf` l) lang then
-        lang
-      else
-        Nothing
-  | otherwise = Nothing
-
-isBacktickFence :: Lang -> Recogniser
-isBacktickFence lang l
-  | "```" `isPrefixOf` stripStart l =
-    Just $ TildeFence $
-      if maybe True (`isInfixOf` l) lang then
-        lang
-       else
-         Nothing
+isFence :: String -> Lang -> Recogniser
+isFence fence lang l
+  | fence `isPrefixOf` stripStart l =
+    Just $ TildeFence $ bool Nothing lang (l `containsLang` lang)
   | otherwise = Nothing
 
 isDelimiter :: Style -> Recogniser
@@ -104,8 +109,8 @@ isDelimiter ds l = asum (map go ds)
     go (LaTeX _)            = isLaTeX l
     go  Bird                = isBird l
     go (Jekyll _ lang)      = isJekyll lang l
-    go (TildeFence lang)    = isTildeFence lang l
-    go (BacktickFence lang) = isBacktickFence lang l
+    go (TildeFence lang)    = isFence "~~~" lang l
+    go (BacktickFence lang) = isFence "```" lang l
     go (OrgMode _ lang)     = isOrgMode lang l
 
 match :: Delimiter -> Delimiter -> Bool
@@ -118,20 +123,34 @@ match  _                 _                      = False
 
 type Style = [Delimiter]
 
-bird, latex, orgmode, haskell, jekyll, tildefence, backtickfence, markdown, all, infer :: Style
-bird             = [Bird]
-latex            = [LaTeX Begin, LaTeX End]
-orgmode          = [OrgMode Begin Nothing, OrgMode End Nothing]
-haskell          = latex <> bird
-jekyll           = [Jekyll Begin Nothing, Jekyll End Nothing]
-tildefence       = [TildeFence Nothing]
-backtickfence    = [BacktickFence Nothing]
-markdown         = bird <> tildefence <> backtickfence
-all              = latex <> markdown
-infer            = []
+all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
+all           = latex <> markdown
+backtickfence = [BacktickFence Nothing]
+bird          = [Bird]
+haskell       = latex <> bird
+infer         = []
+jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
+latex         = [LaTeX Begin, LaTeX End]
+markdown      = bird <> tildefence <> backtickfence
+orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
+tildefence    = [TildeFence Nothing]
+
+parseStyle :: String -> Maybe Style
+parseStyle s = case toLower s of
+  "all"           -> Just all
+  "backtickfence" -> Just backtickfence
+  "bird"          -> Just bird
+  "haskell"       -> Just haskell
+  "infer"         -> Just infer
+  "jekyll"        -> Just jekyll
+  "latex"         -> Just latex
+  "markdown"      -> Just markdown
+  "orgmode"       -> Just orgmode
+  "tildefence"    -> Just tildefence
+  _               -> Nothing
 
 setLang :: Lang -> Style -> Style
-setLang = map . setLang'
+setLang = fmap . setLang'
 
 setLang' :: Lang -> Delimiter -> Delimiter
 setLang' lang (TildeFence _)       = TildeFence lang
@@ -148,8 +167,14 @@ inferred (Just (OrgMode _ _)) = orgmode
 inferred (Just _)             = markdown
 
 data WhitespaceMode
-  = KeepIndent -- ^ keeps only indentations
-  | KeepAll    -- ^ keeps all lines and whitespace
+  = WsKeepIndent -- ^ keeps only indentations
+  | WsKeepAll    -- ^ keeps all lines and whitespace
+
+parseWhitespaceMode :: String -> Maybe WhitespaceMode
+parseWhitespaceMode s = case toLower s of
+  "all"    -> Just WsKeepAll
+  "indent" -> Just WsKeepIndent
+  _        -> Nothing
 
 or :: [a] -> [a] -> [a]
 xs `or` [] = xs
@@ -162,31 +187,35 @@ unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 type State = Maybe Delimiter
 
 unlit' :: WhitespaceMode -> Style -> State -> [(Int, String)] -> Either Error [String]
-unlit' _ _ _ [] = Right []
+unlit' _ _  Nothing    []  = Right []
+unlit' _ _ (Just Bird) []  = Right []
+unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)                 -> continue   $ lineIfKeepAll
-  (Nothing  , Just Bird)               -> open       $ lineIfKeepIndent <> [stripBird' ws l]
-  (Just Bird, Just Bird)               -> continue   $                     [stripBird' ws l]
-  (Just Bird, Nothing)                 -> close      $ lineIfKeepAll
-  (Nothing  , Just (LaTeX End))        -> Left       $ SpuriousDelimiter n $ LaTeX End
-  (Nothing  , Just (Jekyll End lang))  -> Left       $ SpuriousDelimiter n $ Jekyll End lang
-  (Nothing  , Just (OrgMode End lang)) -> Left       $ SpuriousDelimiter n $ OrgMode End lang
-  (Nothing  , Just _o)                 -> open       $ lineIfKeepAll <> lineIfKeepIndent
-  (Just _o  , Nothing)                 -> continue   $ [l]
-  (Just _o  , Just Bird)               -> continue   $ [l]
-  (Just o   , Just c)                  -> if not (o `match` c) then
-                                            Left $ SpuriousDelimiter n c
-                                          else
-                                            close $ lineIfKeepAll
+  (Nothing  , Nothing)   -> continue $ lineIfKeepAll
+
+  (Just Bird, Nothing)   -> close    $ lineIfKeepAll
+  (Just _o  , Nothing)   -> continue $ [l]
+
+  (Nothing  , Just Bird) -> open     $ lineIfKeepIndent <> [stripBird' ws l]
+  (Nothing  , Just c)
+     | isBegin c         -> open     $ lineIfKeepAll <> lineIfKeepIndent
+     | otherwise         -> Left     $ SpuriousDelimiter n c
+
+  (Just Bird, Just Bird) -> continue $ [stripBird' ws l]
+  (Just _o  , Just Bird) -> continue $ [l]
+  (Just o   , Just c)
+     | o `match` c       -> close    $ lineIfKeepAll
+     | otherwise         -> Left     $ SpuriousDelimiter n c
+
   where
     q'                = isDelimiter (ss `or` all) l
     continueWith r l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls
     open              = continueWith q'
     continue          = continueWith q
     close             = continueWith Nothing
-    lineIfKeepAll     = case ws of KeepAll    -> [""]; _ -> []
-    lineIfKeepIndent  = case ws of KeepIndent -> [""]; _ -> []
+    lineIfKeepAll     = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
+    lineIfKeepIndent  = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
 
 relit :: Style -> Style -> String -> Either Error String
 relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
@@ -195,7 +224,7 @@ emitBird :: String -> String
 emitBird l = "> " <> l
 
 emitOpen :: Delimiter -> Maybe String -> [String]
-emitOpen  Bird              l = "" : map emitBird (maybeToList l)
+emitOpen  Bird              l = "" : fmap emitBird (maybeToList l)
 emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
 emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
@@ -214,28 +243,32 @@ emitClose  del                 = emitDelimiter (setLang' Nothing del)
 
 relit' :: Style -> Delimiter -> State -> [(Int, String)] -> Either Error [String]
 relit' _ _   Nothing    [] = Right []
-relit' _ ts (Just Bird) [] = Right $ emitClose ts : []
+relit' _ ts (Just Bird) [] = Right [emitClose ts]
 relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)                 -> (l :) <$> continue
-  (Nothing  , Just Bird)               -> blockOpen     $ Just (stripBird l)
-  (Just Bird, Just Bird)               -> blockContinue $       stripBird l
-  (Just Bird, Nothing)                 -> blockClose
-  (Nothing  , Just (LaTeX End))        -> Left          $ SpuriousDelimiter n $ LaTeX End
-  (Nothing  , Just (Jekyll End lang))  -> Left          $ SpuriousDelimiter n $ Jekyll End lang
-  (Nothing  , Just (OrgMode End lang)) -> Left          $ SpuriousDelimiter n $ OrgMode End lang
-  (Nothing  , Just _o)                 -> blockOpen     $ Nothing
-  (Just _o  , Nothing)                 -> blockContinue $ l
-  (Just _o  , Just Bird)               -> (l :) <$> continue
-  (Just o   , Just c)                  -> if o `match` c then blockClose else Left $ SpuriousDelimiter n c
+  (Nothing  , Nothing)   -> continue
+
+  (Nothing  , Just Bird) -> blockOpen $ Just (stripBird l)
+  (Nothing  , Just c)
+    | isBegin c          -> blockOpen Nothing
+    | otherwise          -> Left $ SpuriousDelimiter n c
+
+  (Just Bird, Nothing)   -> blockClose
+  (Just _o  , Nothing)   -> blockContinue l
+
+  (Just Bird, Just Bird) -> blockContinue $ stripBird l
+  (Just _o  , Just Bird) -> continue
+  (Just o   , Just c)
+    | o `match` c        -> blockClose
+    | otherwise          -> Left $ SpuriousDelimiter n c
 
   where
     q'               = isDelimiter (ss `or` all) l
     continueWith  r  = relit' (ss `or` inferred q') ts r ls
-    continue         = continueWith q
+    continue         = (l :)                <$> continueWith q
     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
-    blockContinue l' = (emitCode  ts l' :)  <$> continue
+    blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
     blockClose       = (emitClose ts    :)  <$> continueWith Nothing
 
 data Error
@@ -244,13 +277,6 @@ data Error
   deriving (Eq, Show)
 
 showError :: Error -> String
-showError (UnexpectedEnd q) = "unexpected EOF; unmatched " <> emitDelimiter q
-showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious " <> emitDelimiter q
-
-infixr 5 <+>
-
-(<+>) :: String -> String -> String
-"" <+> y  = y
-x  <+> "" = x
-x  <+> y  = x <> " " <> y
+showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
+showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious "  <> emitDelimiter q
 

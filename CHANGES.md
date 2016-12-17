@@ -2,6 +2,11 @@
 
 - Use `Either Error Text` for pure error handling
 - Compile with `-Wall`
+- Rename `forLang` to `setLang`
+- Rename `WhitespaceMode` constructors
+- Move `parseStyle` and `parseWhitespaceMode` from `Main.hs` to library
+- Case insensitive language comparison for Markdown fences
+- Change type alias `Lang = Text` to `Lang = Maybe Text`
 
 ### Version 0.3.0.0
 

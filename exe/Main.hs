@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Data.Char (toLower)
+import           Data.Maybe (fromMaybe)
 import           Data.Text (Text, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -13,19 +13,6 @@ import           System.Environment (getArgs,getProgName)
 import           System.Exit (exitSuccess)
 import           System.IO (hPutStrLn,stderr)
 import           Unlit.Text
-
-parseStyle :: String -> Style
-parseStyle arg = case map toLower arg of
-  "all"           -> all
-  "bird"          -> bird
-  "jekyll"        -> jekyll
-  "haskell"       -> haskell
-  "latex"         -> latex
-  "markdown"      -> markdown
-  "tildefence"    -> tildefence
-  "backtickfence" -> backtickfence
-  "code"          -> []
-  _               -> error ("non-existent style " ++ arg)
 
 data Options = Options
   { optSourceStyle :: Style
@@ -43,24 +30,25 @@ defaultOptions = Options
   , optTargetStyle = []
   , optInputFile   = T.getContents
   , optOutputFile  = T.putStrLn
-  , optWsMode      = KeepIndent
+  , optWsMode      = WsKeepIndent
   , optGhc         = False
   , optLanguage    = Nothing
   }
 
-parseWsMode :: String -> WhitespaceMode
-parseWsMode str = case map toLower str of
-  "keep-all" -> KeepAll
-  _          -> KeepIndent
+parseStyle' :: String -> Style
+parseStyle' arg = fromMaybe (error $ "non-existent style" ++ arg) $ parseStyle $ T.pack arg
+
+parseWhitespaceMode' :: String -> WhitespaceMode
+parseWhitespaceMode' arg = fromMaybe (error $ "non-existent whitespace mode" ++ arg) $ parseWhitespaceMode $ T.pack arg
 
 options :: [ OptDescr (Options -> IO Options) ]
 options =
   [ Option "f" ["from"]
-    (ReqArg (\arg opt -> return opt { optSourceStyle = optSourceStyle opt ++ parseStyle arg })
+    (ReqArg (\arg opt -> return opt { optSourceStyle = optSourceStyle opt ++ parseStyle' arg })
             "STYLE_NAME")
     "Source style (all, bird, jekyll, haskell, latex, markdown, tildefence, backtickfence)"
   , Option "t" ["to"]
-    (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle arg })
+    (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle' arg })
             "STYLE_NAME")
     "Target style (bird, latex, tildefence, backtickfence, code)"
 
@@ -78,9 +66,9 @@ options =
     "Follow GHC calling conventions"
 
   , Option [] ["ws-mode"]
-    (ReqArg (\arg opt -> return opt { optWsMode = parseWsMode arg })
+    (ReqArg (\arg opt -> return opt { optWsMode = parseWhitespaceMode' arg })
             "WHITESPACE_MODE")
-    "Whitespace mode (keep-all, keep-indent)"
+    "Whitespace mode (all, indent)"
 
   , Option [] ["language"]
     (ReqArg (\arg opt -> return opt { optLanguage = Just (T.pack arg) })
@@ -91,8 +79,6 @@ options =
     (NoArg  (\_ -> do
               prg <- getProgName
               hPutStrLn stderr (usageInfo prg options)
-              args <- getArgs
-              print args
               exitSuccess))
     "Show help"
 
@@ -110,23 +96,14 @@ main = do
   -- use my own calling conventions
   let (actions, nonOptions, _errors) = getOpt Permute options args
   opts <- foldl (>>=) (return defaultOptions) actions
-  let Options { optSourceStyle = ss
-              , optTargetStyle = ts
-              , optInputFile   = istream
-              , optOutputFile  = ostream
-              , optWsMode      = wsmode
-              , optGhc         = ghc
-              , optLanguage    = lang
-              } = opts
 
-  let istream' = if ghc then T.readFile  (nonOptions !! 1) else istream
-  let ostream' = if ghc then T.writeFile (nonOptions !! 2) else ostream
+  let ss = setLang (optLanguage opts) (optSourceStyle opts)
+      ts = setLang (optLanguage opts) (optTargetStyle opts)
+      (istream, ostream) =
+        case nonOptions of
+          (i:o:_) | optGhc opts -> (T.readFile i, T.writeFile o)
+                  | otherwise -> error "Two arguments required: Input and output file"
+          _ -> (optInputFile opts, optOutputFile opts)
 
-  let ss' = setLang lang ss
-  let ts' = setLang lang ts
-
-  -- define unlit/relit
-  let run = either (error . unpack . showError) id . if null ts then unlit wsmode ss' else relit ss' ts'
-
-  -- run unlit/relit
-  istream' >>= ostream' . run
+  istream >>= either (error . unpack . showError) ostream .
+    if null ts then unlit (optWsMode opts) ss else relit ss ts
