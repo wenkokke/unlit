@@ -209,7 +209,7 @@ The options for source styles are as follows:
 It is possible to set the language of the source styles using the following function.
 
 > setLang :: Lang -> Style -> Style
-> setLang = map . setLang'
+> setLang = fmap . setLang'
 
 > setLang' :: Lang -> Delimiter -> Delimiter
 > setLang' lang (TildeFence _)       = TildeFence lang
@@ -324,7 +324,7 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
 > emitBird l = "> " <> l
 
 > emitOpen :: Delimiter -> Maybe Text -> [Text]
-> emitOpen  Bird              l = "" : map emitBird (maybeToList l)
+> emitOpen  Bird              l = "" : fmap emitBird (maybeToList l)
 > emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
 > emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 > emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
@@ -346,11 +346,11 @@ function.
 
 > relit' :: Style -> Delimiter -> State -> [(Int, Text)] -> Either Error [Text]
 > relit' _ _   Nothing    [] = Right []
-> relit' _ ts (Just Bird) [] = Right $ emitClose ts : []
+> relit' _ ts (Just Bird) [] = Right [emitClose ts]
 > relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 > relit' ss ts q ((n, l):ls) = case (q, q') of
 >
->   (Nothing  , Nothing)   -> (l :) <$> continue
+>   (Nothing  , Nothing)   -> continue
 >
 >   (Nothing  , Just Bird) -> blockOpen $ Just (stripBird l)
 >   (Nothing  , Just c)
@@ -358,10 +358,10 @@ function.
 >     | otherwise          -> Left $ SpuriousDelimiter n c
 >
 >   (Just Bird, Nothing)   -> blockClose
->   (Just _o  , Nothing)   -> blockContinue $ l
+>   (Just _o  , Nothing)   -> blockContinue l
 >
 >   (Just Bird, Just Bird) -> blockContinue $ stripBird l
->   (Just _o  , Just Bird) -> (l :) <$> continue
+>   (Just _o  , Just Bird) -> continue
 >   (Just o   , Just c)
 >     | o `match` c        -> blockClose
 >     | otherwise          -> Left $ SpuriousDelimiter n c
@@ -369,9 +369,9 @@ function.
 >   where
 >     q'               = isDelimiter (ss `or` all) l
 >     continueWith  r  = relit' (ss `or` inferred q') ts r ls
->     continue         = continueWith q
+>     continue         = (l :)                <$> continueWith q
 >     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
->     blockContinue l' = (emitCode  ts l' :)  <$> continue
+>     blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
 >     blockClose       = (emitClose ts    :)  <$> continueWith Nothing
 
 Error handling
