@@ -22,7 +22,7 @@ runGhcUnlit ifile = do
 
 runMyUnlit :: String -> IO String
 runMyUnlit ifile = do
-  (exitCode, stdout, stderr) <- readProcessWithExitCode myUnlit ["--ws-mode=keep-all","-f","haskell","-i",ifile] ""
+  (exitCode, stdout, stderr) <- readProcessWithExitCode myUnlit ["--ws-mode=all","-f","haskell","-i",ifile] ""
   case exitCode of
    ExitSuccess   -> return stdout
    ExitFailure n -> return stderr
