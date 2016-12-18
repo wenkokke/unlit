@@ -172,8 +172,8 @@ What do we want `unlit` to do?
 ==============================
 
 The `unlit` program that we will implement below will do the following:
-it will read a literate program from the standard input---allowing one
-or more styles of code block---and emit only the code to the standard
+it will read a literate program from the standard input -- allowing one
+or more styles of code block -- and emit only the code to the standard
 output.
 
 The options for source styles are as follows:
