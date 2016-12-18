@@ -415,7 +415,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
 Error handling
 ==============
 
-In case of an error both `unlit' and `relit' return a value of the datatype `Error'.
+In case of an error both `unlit` and `relit` return a value of the datatype `Error`.
 
 ``` haskell
 data Error
@@ -423,7 +423,7 @@ data Error
   | UnexpectedEnd     Delimiter
   deriving (Eq, Show)
 ```
-We can get a text representation of the error using `showError'.
+We can get a text representation of the error using `showError`.
 
 ``` haskell
 showError :: Error -> Text

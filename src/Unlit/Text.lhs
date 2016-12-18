@@ -377,14 +377,14 @@ function.
 Error handling
 ==============
 
-In case of an error both `unlit' and `relit' return a value of the datatype `Error'.
+In case of an error both `unlit` and `relit` return a value of the datatype `Error`.
 
 > data Error
 >   = SpuriousDelimiter Int Delimiter
 >   | UnexpectedEnd     Delimiter
 >   deriving (Eq, Show)
 
-We can get a text representation of the error using `showError'.
+We can get a text representation of the error using `showError`.
 
 > showError :: Error -> Text
 > showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
