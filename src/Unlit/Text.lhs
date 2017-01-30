@@ -172,8 +172,8 @@ What do we want `unlit` to do?
 ==============================
 
 The `unlit` program that we will implement below will do the following:
-it will read a literate program from the standard input---allowing one
-or more styles of code block---and emit only the code to the standard
+it will read a literate program from the standard input—allowing one
+or more styles of code block—and emit only the code to the standard
 output.
 
 The options for source styles are as follows:
@@ -377,14 +377,14 @@ function.
 Error handling
 ==============
 
-In case of an error both `unlit' and `relit' return a value of the datatype `Error'.
+In case of an error both `unlit` and `relit` return a value of the datatype `Error`.
 
 > data Error
 >   = SpuriousDelimiter Int Delimiter
 >   | UnexpectedEnd     Delimiter
 >   deriving (Eq, Show)
 
-We can get a text representation of the error using `showError'.
+We can get a text representation of the error using `showError`.
 
 > showError :: Error -> Text
 > showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
