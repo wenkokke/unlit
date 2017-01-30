@@ -192,8 +192,8 @@ What do we want `unlit` to do?
 ==============================
 
 The `unlit` program that we will implement below will do the following:
-it will read a literate program from the standard input---allowing one
-or more styles of code block---and emit only the code to the standard
+it will read a literate program from the standard input — allowing one
+or more styles of code block — and emit only the code to the standard
 output.
 
 The options for source styles are as follows:
@@ -415,7 +415,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
 Error handling
 ==============
 
-In case of an error both `unlit' and `relit' return a value of the datatype `Error'.
+In case of an error both `unlit` and `relit` return a value of the datatype `Error`.
 
 ``` haskell
 data Error
@@ -423,7 +423,7 @@ data Error
   | UnexpectedEnd     Delimiter
   deriving (Eq, Show)
 ```
-We can get a text representation of the error using `showError'.
+We can get a text representation of the error using `showError`.
 
 ``` haskell
 showError :: Error -> Text
