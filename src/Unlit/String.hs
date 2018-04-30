@@ -238,16 +238,16 @@ emitCode :: Delimiter -> String -> String
 emitCode Bird l = emitBird l
 emitCode _    l = l
 
-emitClose :: Delimiter -> String
-emitClose  Bird                = ""
-emitClose (LaTeX Begin)        = emitClose (LaTeX End)
-emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
-emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
-emitClose  del                 = emitDelimiter (setLang' Nothing del)
+emitClose :: Delimiter -> Maybe String -> [String]
+emitClose  Bird                l = maybeToList l
+emitClose (LaTeX Begin)        l = emitClose (LaTeX End) l
+emitClose (Jekyll Begin lang)  l = emitClose (Jekyll End lang) l
+emitClose (OrgMode Begin lang) l = emitClose (OrgMode End lang) l
+emitClose  del                 l = emitDelimiter (setLang' Nothing del) : maybeToList l
 
 relit' :: Style -> Delimiter -> State -> [(Int, String)] -> Either Error [String]
 relit' _ _   Nothing    [] = Right []
-relit' _ ts (Just Bird) [] = Right [emitClose ts]
+relit' _ ts (Just Bird) [] = Right (emitClose ts Nothing)
 relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
@@ -258,13 +258,13 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     | isBegin c          -> blockOpen Nothing
     | otherwise          -> Left $ SpuriousDelimiter n c
 
-  (Just Bird, Nothing)   -> blockClose
+  (Just Bird, Nothing)   -> blockClose $ Just l
   (Just _o  , Nothing)   -> blockContinue l
 
   (Just Bird, Just Bird) -> blockContinue $ stripBird l
   (Just _o  , Just Bird) -> continue
   (Just o   , Just c)
-    | o `match` c        -> blockClose
+    | o `match` c        -> blockClose Nothing
     | otherwise          -> Left $ SpuriousDelimiter n c
 
   where
@@ -273,9 +273,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     continue         = (l :)                <$> continueWith q
     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
     blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
-    blockClose
-      | null ls && ts == Bird = Right []
-      | otherwise             = (emitClose ts :)  <$> continueWith Nothing
+    blockClose l'    = (emitClose ts l' <>)  <$> continueWith Nothing
 
 data Error
   = SpuriousDelimiter Int Delimiter
