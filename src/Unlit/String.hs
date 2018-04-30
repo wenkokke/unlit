@@ -26,8 +26,7 @@ data Delimiter
   | OrgMode       BeginEnd Lang
   | Bird
   | Jekyll        BeginEnd Lang
-  | TildeFence    Lang
-  | BacktickFence Lang
+  | Markdown      Fence Lang
   deriving (Eq, Show)
 
 data BeginEnd
@@ -41,6 +40,11 @@ isBegin (OrgMode Begin _) = True
 isBegin (Jekyll  Begin _) = True
 isBegin  _                = False
 
+data Fence
+  = Tilde
+  | Backtick
+  deriving (Eq, Show)
+
 type Lang = Maybe String
 
 containsLang :: String -> Lang -> Bool
@@ -48,15 +52,15 @@ containsLang _ Nothing     = True
 containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
 
 emitDelimiter :: Delimiter -> String
-emitDelimiter (LaTeX Begin)     = "\\begin{code}"
-emitDelimiter (LaTeX End)       = "\\end{code}"
-emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" <+> fromMaybe "" l
-emitDelimiter (OrgMode End _)   = "#+END_SRC"
-emitDelimiter  Bird             = ">"
-emitDelimiter (Jekyll Begin l)  = "{% highlight " <+> fromMaybe "" l <+> " %}"
-emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
-emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
-emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
+emitDelimiter (LaTeX Begin)         = "\\begin{code}"
+emitDelimiter (LaTeX End)           = "\\end{code}"
+emitDelimiter (OrgMode Begin l)     = "#+BEGIN_SRC" <+> fromMaybe "" l
+emitDelimiter (OrgMode End _)       = "#+END_SRC"
+emitDelimiter  Bird                 = ">"
+emitDelimiter (Jekyll Begin l)      = "{% highlight " <+> fromMaybe "" l <+> " %}"
+emitDelimiter (Jekyll End   _)      = "{% endhighlight %}"
+emitDelimiter (Markdown Tilde l)    = "~~~" <+> fromMaybe "" l
+emitDelimiter (Markdown Backtick l) = "```" <+> fromMaybe "" l
 
 infixr 5 <+>
 (<+>) :: String -> String -> String
@@ -97,35 +101,34 @@ isJekyll lang l
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 
-isFence :: String -> Lang -> Recogniser
-isFence fence lang l
-  | fence `isPrefixOf` stripStart l =
-    Just $ TildeFence $ bool Nothing lang (l `containsLang` lang)
+isMarkdown :: Fence -> String -> Lang -> Recogniser
+isMarkdown fence fenceStr lang l
+  | fenceStr `isPrefixOf` stripStart l =
+    Just $ Markdown fence $ bool Nothing lang (l `containsLang` lang)
   | otherwise = Nothing
 
 isDelimiter :: Style -> Recogniser
 isDelimiter ds l = asum (map go ds)
   where
-    go (LaTeX _)            = isLaTeX l
-    go  Bird                = isBird l
-    go (Jekyll _ lang)      = isJekyll lang l
-    go (TildeFence lang)    = isFence "~~~" lang l
-    go (BacktickFence lang) = isFence "```" lang l
-    go (OrgMode _ lang)     = isOrgMode lang l
+    go (LaTeX _)                = isLaTeX l
+    go  Bird                    = isBird l
+    go (Jekyll _ lang)          = isJekyll lang l
+    go (Markdown Tilde lang)    = isMarkdown Tilde "~~~" lang l
+    go (Markdown Backtick lang) = isMarkdown Backtick "```" lang l
+    go (OrgMode _ lang)         = isOrgMode lang l
 
 match :: Delimiter -> Delimiter -> Bool
 match (LaTeX Begin)     (LaTeX End)             = True
 match (Jekyll Begin _)  (Jekyll End _)          = True
 match (OrgMode Begin _) (OrgMode End _)         = True
-match (TildeFence _)    (TildeFence Nothing)    = True
-match (BacktickFence _) (BacktickFence Nothing) = True
+match (Markdown f _)    (Markdown g Nothing)    = f == g
 match  _                 _                      = False
 
 type Style = [Delimiter]
 
 all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
 all           = latex <> markdown
-backtickfence = [BacktickFence Nothing]
+backtickfence = [Markdown Backtick Nothing]
 bird          = [Bird]
 haskell       = latex <> bird
 infer         = []
@@ -133,7 +136,7 @@ jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
 latex         = [LaTeX Begin, LaTeX End]
 markdown      = bird <> tildefence <> backtickfence
 orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
-tildefence    = [TildeFence Nothing]
+tildefence    = [Markdown Tilde Nothing]
 
 parseStyle :: String -> Maybe Style
 parseStyle s = case toLower s of
@@ -153,8 +156,7 @@ setLang :: Lang -> Style -> Style
 setLang = fmap . setLang'
 
 setLang' :: Lang -> Delimiter -> Delimiter
-setLang' lang (TildeFence _)       = TildeFence lang
-setLang' lang (BacktickFence _)    = BacktickFence lang
+setLang' lang (Markdown fence _)   = Markdown fence lang
 setLang' lang (OrgMode beginEnd _) = OrgMode beginEnd lang
 setLang' lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
 setLang' _     d                   = d

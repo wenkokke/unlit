@@ -32,8 +32,7 @@ data Delimiter
   | OrgMode       BeginEnd Lang
   | Bird
   | Jekyll        BeginEnd Lang
-  | TildeFence    Lang
-  | BacktickFence Lang
+  | Markdown      Fence Lang
   deriving (Eq, Show)
 ```
 Some of these code blocks need to carry around additional information.
@@ -52,9 +51,16 @@ isBegin (OrgMode Begin _) = True
 isBegin (Jekyll  Begin _) = True
 isBegin  _                = False
 ```
-On the other hand, Markdown-style fenced code blocks may be annotated
-with all sorts of information. Most prominently, their programming
-language.
+On the other hand, Markdown-style fences occur in two different variants.
+
+``` haskell
+data Fence
+  = Tilde
+  | Backtick
+  deriving (Eq, Show)
+```
+Furthermore they may be annotated with all sorts of information. Most prominently,
+their programming language.
 
 ``` haskell
 type Lang = Maybe Text
@@ -69,15 +75,15 @@ following function.
 
 ``` haskell
 emitDelimiter :: Delimiter -> Text
-emitDelimiter (LaTeX Begin)     = "\\begin{code}"
-emitDelimiter (LaTeX End)       = "\\end{code}"
-emitDelimiter (OrgMode Begin l) = "#+BEGIN_SRC" <+> fromMaybe "" l
-emitDelimiter (OrgMode End _)   = "#+END_SRC"
-emitDelimiter  Bird             = ">"
-emitDelimiter (Jekyll Begin l)  = "{% highlight " <+> fromMaybe "" l <+> " %}"
-emitDelimiter (Jekyll End   _)  = "{% endhighlight %}"
-emitDelimiter (TildeFence l)    = "~~~" <+> fromMaybe "" l
-emitDelimiter (BacktickFence l) = "```" <+> fromMaybe "" l
+emitDelimiter (LaTeX Begin)         = "\\begin{code}"
+emitDelimiter (LaTeX End)           = "\\end{code}"
+emitDelimiter (OrgMode Begin l)     = "#+BEGIN_SRC" <+> fromMaybe "" l
+emitDelimiter (OrgMode End _)       = "#+END_SRC"
+emitDelimiter  Bird                 = ">"
+emitDelimiter (Jekyll Begin l)      = "{% highlight " <+> fromMaybe "" l <+> " %}"
+emitDelimiter (Jekyll End   _)      = "{% endhighlight %}"
+emitDelimiter (Markdown Tilde l)    = "~~~" <+> fromMaybe "" l
+emitDelimiter (Markdown Backtick l) = "```" <+> fromMaybe "" l
 ```
 ``` haskell
 infixr 5 <+>
@@ -143,20 +149,18 @@ isJekyll lang l
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 ```
-Lastly, Markdown supports two styles of fenced codeblocks: using
-tildes or using backticks. These fenced codeblocks have as a
-peculiarity that they can be defined to only match on fences for a
-certain language.
+Lastly, Markdown fenced codeblocks have as a peculiarity that they
+can be defined to only match on fences for a certain language.
 
 Below we only check if the given language occurs *anywhere* in the
 string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
 ``` haskell
-isFence :: Text -> Lang -> Recogniser
-isFence fence lang l
-  | fence `isPrefixOf` stripStart l =
-    Just $ TildeFence $ bool Nothing lang (l `containsLang` lang)
+isMarkdown :: Fence -> Text -> Lang -> Recogniser
+isMarkdown fence fenceStr lang l
+  | fenceStr `isPrefixOf` stripStart l =
+    Just $ Markdown fence $ bool Nothing lang (l `containsLang` lang)
   | otherwise = Nothing
 ```
 In general, we will also need a function that checks, for a given
@@ -166,12 +170,12 @@ line, whether it conforms to *any* of a set of given styles.
 isDelimiter :: Style -> Recogniser
 isDelimiter ds l = asum (map go ds)
   where
-    go (LaTeX _)            = isLaTeX l
-    go  Bird                = isBird l
-    go (Jekyll _ lang)      = isJekyll lang l
-    go (TildeFence lang)    = isFence "~~~" lang l
-    go (BacktickFence lang) = isFence "```" lang l
-    go (OrgMode _ lang)     = isOrgMode lang l
+    go (LaTeX _)                = isLaTeX l
+    go  Bird                    = isBird l
+    go (Jekyll _ lang)          = isJekyll lang l
+    go (Markdown Tilde lang)    = isMarkdown Tilde "~~~" lang l
+    go (Markdown Backtick lang) = isMarkdown Backtick "```" lang l
+    go (OrgMode _ lang)         = isOrgMode lang l
 ```
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
@@ -181,8 +185,7 @@ match :: Delimiter -> Delimiter -> Bool
 match (LaTeX Begin)     (LaTeX End)             = True
 match (Jekyll Begin _)  (Jekyll End _)          = True
 match (OrgMode Begin _) (OrgMode End _)         = True
-match (TildeFence _)    (TildeFence Nothing)    = True
-match (BacktickFence _) (BacktickFence Nothing) = True
+match (Markdown f _)    (Markdown g Nothing)    = f == g
 match  _                 _                      = False
 ```
 Note that Bird-tags are notably absent from the `match` function, as
@@ -204,7 +207,7 @@ type Style = [Delimiter]
 ``` haskell
 all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
 all           = latex <> markdown
-backtickfence = [BacktickFence Nothing]
+backtickfence = [Markdown Backtick Nothing]
 bird          = [Bird]
 haskell       = latex <> bird
 infer         = []
@@ -212,7 +215,7 @@ jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
 latex         = [LaTeX Begin, LaTeX End]
 markdown      = bird <> tildefence <> backtickfence
 orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
-tildefence    = [TildeFence Nothing]
+tildefence    = [Markdown Tilde Nothing]
 ```
 ``` haskell
 parseStyle :: Text -> Maybe Style
@@ -237,8 +240,7 @@ setLang = fmap . setLang'
 ```
 ``` haskell
 setLang' :: Lang -> Delimiter -> Delimiter
-setLang' lang (TildeFence _)       = TildeFence lang
-setLang' lang (BacktickFence _)    = BacktickFence lang
+setLang' lang (Markdown fence _)   = Markdown fence lang
 setLang' lang (OrgMode beginEnd _) = OrgMode beginEnd lang
 setLang' lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
 setLang' _     d                   = d
