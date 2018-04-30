@@ -358,11 +358,12 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
 
 ``` haskell
 emitBird :: Text -> Text
-emitBird l = "> " <> l
+emitBird l | stripStart l == "" = ">"
+           | otherwise          = "> " <> l
 ```
 ``` haskell
 emitOpen :: Delimiter -> Maybe Text -> [Text]
-emitOpen  Bird              l = "" : fmap emitBird (maybeToList l)
+emitOpen  Bird              l = fmap emitBird (maybeToList l)
 emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
 emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
@@ -413,7 +414,9 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     continue         = (l :)                <$> continueWith q
     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
     blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
-    blockClose       = (emitClose ts    :)  <$> continueWith Nothing
+    blockClose
+      | null ls && ts == Bird = Right []
+      | otherwise             = (emitClose ts :)  <$> continueWith Nothing
 ```
 Error handling
 ==============
