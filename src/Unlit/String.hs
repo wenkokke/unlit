@@ -38,6 +38,7 @@ isBegin :: Delimiter -> Bool
 isBegin (LaTeX   Begin  ) = True
 isBegin (OrgMode Begin _) = True
 isBegin (Jekyll  Begin _) = True
+isBegin (Markdown _ _)    = True
 isBegin  _                = False
 
 data Fence
