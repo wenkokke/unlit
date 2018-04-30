@@ -77,7 +77,7 @@ following function.
 > emitDelimiter (OrgMode Begin l)     = "#+BEGIN_SRC" <+> fromMaybe "" l
 > emitDelimiter (OrgMode End _)       = "#+END_SRC"
 > emitDelimiter  Bird                 = ">"
-> emitDelimiter (Jekyll Begin l)      = "{% highlight " <+> fromMaybe "" l <+> " %}"
+> emitDelimiter (Jekyll Begin l)      = "{% highlight" <+> fromMaybe "" l <+> "%}"
 > emitDelimiter (Jekyll End   _)      = "{% endhighlight %}"
 > emitDelimiter (Markdown Tilde l)    = "~~~" <+> fromMaybe "" l
 > emitDelimiter (Markdown Backtick l) = "```" <+> fromMaybe "" l
