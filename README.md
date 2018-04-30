@@ -236,7 +236,7 @@ type Style = [Delimiter]
 
 ``` haskell
 all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
-all           = latex <> markdown
+all           = latex <> markdown <> orgmode <> jekyll
 backtickfence = [Markdown Backtick Nothing]
 bird          = [Bird]
 haskell       = latex <> bird
