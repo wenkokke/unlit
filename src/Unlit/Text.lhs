@@ -310,8 +310,8 @@ arbitrary code... I wish I was.
 What `relit` will do is read a literate file using one style of
 delimiters and emit the same file using an other style of delimiters.
 
-> relit :: Style -> Style -> Text -> Either Error Text
-> relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
+> relit :: Style -> Delimiter -> Text -> Either Error Text
+> relit ss ts = fmap unlines . relit' ss ts Nothing . zip [1..] . lines
 
 Again, we will interpret the helper function `relit'` as an
 automaton, which remembers the current state. However, we now also
