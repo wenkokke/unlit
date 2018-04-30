@@ -41,6 +41,12 @@ isBegin (Jekyll  Begin _) = True
 isBegin (Markdown _ _)    = True
 isBegin  _                = False
 
+setBegin :: BeginEnd -> Delimiter -> Delimiter
+setBegin beginEnd (LaTeX   _  )    = LaTeX   beginEnd
+setBegin beginEnd (OrgMode _ lang) = OrgMode beginEnd lang
+setBegin beginEnd (Jekyll  _ lang) = Jekyll  beginEnd lang
+setBegin _         del             = del
+
 data Fence
   = Tilde
   | Backtick
@@ -228,22 +234,16 @@ emitBird l | stripStart l == "" = ">"
            | otherwise          = "> " <> l
 
 emitOpen :: Delimiter -> Maybe String -> [String]
-emitOpen  Bird              l = fmap emitBird (maybeToList l)
-emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
-emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
-emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
-emitOpen  del               l = emitDelimiter del : maybeToList l
+emitOpen  Bird l = fmap emitBird (maybeToList l)
+emitOpen  del  l = emitDelimiter (setBegin Begin del) : maybeToList l
 
 emitCode :: Delimiter -> String -> String
 emitCode Bird l = emitBird l
 emitCode _    l = l
 
 emitClose :: Delimiter -> Maybe String -> [String]
-emitClose  Bird                l = maybeToList l
-emitClose (LaTeX Begin)        l = emitClose (LaTeX End) l
-emitClose (Jekyll Begin lang)  l = emitClose (Jekyll End lang) l
-emitClose (OrgMode Begin lang) l = emitClose (OrgMode End lang) l
-emitClose  del                 l = emitDelimiter (setLang' Nothing del) : maybeToList l
+emitClose  Bird l = maybeToList l
+emitClose  del  l = emitDelimiter (setBegin End $ setLang' Nothing del) : maybeToList l
 
 relit' :: Style -> Delimiter -> State -> [(Int, String)] -> Either Error [String]
 relit' _ _   Nothing    [] = Right []
