@@ -15,6 +15,17 @@ roundtrip:
 			unlit -f $$i -t $$j -i test/roundtrip.1 -o test/roundtrip.2; \
 			unlit -f $$j -t $$i -i test/roundtrip.2 -o test/roundtrip.3; \
 			diff test/roundtrip.1 test/roundtrip.3 || exit 1; \
+		done; \
+		echo "$$i without empty lines"; \
+		sed '/^\s*$$/d' src/Unlit/Text.lhs > test/roundtrip.0; \
+		unlit -t $$i -l haskell -i test/roundtrip.0 -o test/roundtrip.1; \
+		unlit -f $$i -t bird -i test/roundtrip.1 -o test/roundtrip.2; \
+		diff test/roundtrip.2 test/roundtrip.0 || exit 1; \
+		for j in jekyll orgmode latex backtickfence tildefence; do \
+			echo "  <-> $$j"; \
+			unlit -f $$i -t $$j -i test/roundtrip.1 -o test/roundtrip.2; \
+			unlit -f $$j -t $$i -i test/roundtrip.2 -o test/roundtrip.3; \
+			diff test/roundtrip.1 test/roundtrip.3 || exit 1; \
 		done \
 	done
 
