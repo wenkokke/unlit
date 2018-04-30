@@ -10,6 +10,7 @@ module Unlit.Text (
   , Error(..), showError
 ) where
 ```
+
 ``` haskell
 import Data.Functor ((<$>))
 import Data.Foldable (asum)
@@ -19,6 +20,7 @@ import Data.Monoid ((<>))
 import Prelude hiding (all, or, String, unlines, lines, drop)
 import Data.Text (Text, stripStart, stripEnd, isPrefixOf, isSuffixOf, isInfixOf, unlines, lines, pack, drop, toLower)
 ```
+
 What are literate programs?
 ===========================
 
@@ -35,6 +37,7 @@ data Delimiter
   | Markdown      Fence Lang
   deriving (Eq, Show)
 ```
+
 Some of these code blocks need to carry around additional information.
 For instance, LaTex code blocks use distinct opening and closing tags.
 
@@ -44,6 +47,7 @@ data BeginEnd
   | End
   deriving (Eq, Show)
 ```
+
 ``` haskell
 isBegin :: Delimiter -> Bool
 isBegin (LaTeX   Begin  ) = True
@@ -52,6 +56,7 @@ isBegin (Jekyll  Begin _) = True
 isBegin (Markdown _ _)    = True
 isBegin  _                = False
 ```
+
 On the other hand, Markdown-style fences occur in two different variants.
 
 ``` haskell
@@ -60,17 +65,20 @@ data Fence
   | Backtick
   deriving (Eq, Show)
 ```
+
 Furthermore they may be annotated with all sorts of information. Most prominently,
 their programming language.
 
 ``` haskell
 type Lang = Maybe Text
 ```
+
 ``` haskell
 containsLang :: Text -> Lang -> Bool
 containsLang _ Nothing     = True
 containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
 ```
+
 In order to emit these code blocks, we will define the
 following function.
 
@@ -86,6 +94,7 @@ emitDelimiter (Jekyll End   _)      = "{% endhighlight %}"
 emitDelimiter (Markdown Tilde l)    = "~~~" <+> fromMaybe "" l
 emitDelimiter (Markdown Backtick l) = "```" <+> fromMaybe "" l
 ```
+
 ``` haskell
 infixr 5 <+>
 (<+>) :: Text -> Text -> Text
@@ -93,12 +102,14 @@ infixr 5 <+>
 x  <+> "" = x
 x  <+> y  = x <> " " <> y
 ```
+
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
 
 ``` haskell
 type Recogniser = Text -> Maybe Delimiter
 ```
+
 For instance, in LaTeX-style, a codeblock is delimited by
 `\begin{code}` and `\end{code}` tags, which must appear at the first
 position (since we do not support indented code blocks).
@@ -110,6 +121,7 @@ isLaTeX l
   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
   | otherwise = Nothing
 ```
+
 ``` haskell
 isOrgMode :: Lang -> Recogniser
 isOrgMode lang l
@@ -118,6 +130,7 @@ isOrgMode lang l
   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
   | otherwise = Nothing
 ```
+
 In Bird-style, every line in a codeblock must start with a Bird tag.
 A tagged line is defined as *either* a line containing solely the
 symbol '>', or a line starting with the symbol '>' followed by at
@@ -127,6 +140,7 @@ least one space.
 isBird :: Recogniser
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 ```
+
 Due to this definition, whenever we strip a bird tag, in normal
 whitespace modes we also remove the first space following it.
 
@@ -134,11 +148,13 @@ whitespace modes we also remove the first space following it.
 stripBird :: Text -> Text
 stripBird = stripBird' WsKeepIndent
 ```
+
 ``` haskell
 stripBird' :: WhitespaceMode -> Text -> Text
 stripBird' WsKeepAll    l = " " <> drop 1 l
 stripBird' WsKeepIndent l = drop 2 l
 ```
+
 Then we have Jekyll Liquid code blocks.
 
 ``` haskell
@@ -150,6 +166,7 @@ isJekyll lang l
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 ```
+
 Lastly, Markdown fenced codeblocks have as a peculiarity that they
 can be defined to only match on fences for a certain language.
 
@@ -164,6 +181,7 @@ isMarkdown fence fenceStr lang l
     Just $ Markdown fence $ bool Nothing lang (l `containsLang` lang)
   | otherwise = Nothing
 ```
+
 In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
 
@@ -178,6 +196,7 @@ isDelimiter ds l = asum (map go ds)
     go (Markdown Backtick lang) = isMarkdown Backtick "```" lang l
     go (OrgMode _ lang)         = isOrgMode lang l
 ```
+
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
 
@@ -189,6 +208,7 @@ match (OrgMode Begin _) (OrgMode End _)         = True
 match (Markdown f _)    (Markdown g Nothing)    = f == g
 match  _                 _                      = False
 ```
+
 Note that Bird-tags are notably absent from the `match` function, as
 they are a special case.
 
@@ -205,6 +225,7 @@ The options for source styles are as follows:
 ``` haskell
 type Style = [Delimiter]
 ```
+
 ``` haskell
 all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
 all           = latex <> markdown
@@ -218,6 +239,7 @@ markdown      = bird <> tildefence <> backtickfence
 orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
 tildefence    = [Markdown Tilde Nothing]
 ```
+
 ``` haskell
 parseStyle :: Text -> Maybe Style
 parseStyle s = case toLower s of
@@ -233,12 +255,14 @@ parseStyle s = case toLower s of
   "tildefence"    -> Just tildefence
   _               -> Nothing
 ```
+
 It is possible to set the language of the source styles using the following function.
 
 ``` haskell
 setLang :: Lang -> Style -> Style
 setLang = fmap . setLang'
 ```
+
 ``` haskell
 setLang' :: Lang -> Delimiter -> Delimiter
 setLang' lang (Markdown fence _)   = Markdown fence lang
@@ -246,6 +270,7 @@ setLang' lang (OrgMode beginEnd _) = OrgMode beginEnd lang
 setLang' lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
 setLang' _     d                   = d
 ```
+
 Additionally, when the source style is empty, the program will
 attempt to guess the style based on the first delimiter it
 encounters. It will try to be permissive in this, and therefore, if
@@ -259,6 +284,7 @@ inferred (Just (Jekyll _ _))  = jekyll
 inferred (Just (OrgMode _ _)) = orgmode
 inferred (Just _)             = markdown
 ```
+
 Lastly, we would like `unlit` to be able to operate in several
 different whitespace modes. For now, these are:
 
@@ -267,6 +293,7 @@ data WhitespaceMode
   = WsKeepIndent -- ^ keeps only indentations
   | WsKeepAll    -- ^ keeps all lines and whitespace
 ```
+
 ``` haskell
 parseWhitespaceMode :: Text -> Maybe WhitespaceMode
 parseWhitespaceMode s = case toLower s of
@@ -274,6 +301,7 @@ parseWhitespaceMode s = case toLower s of
   "indent" -> Just WsKeepIndent
   _        -> Nothing
 ```
+
 We would like to combine the inferred style with current styles as
 one would combine maybe values using the alternative operator
 `(<|>)`. Therefore, we will define our own version of this operator.
@@ -284,6 +312,7 @@ xs `or` [] = xs
 [] `or` ys = ys
 xs `or` _  = xs
 ```
+
 Thus, the `unlit` function will have two parameters: its source style
 and the text to convert.
 
@@ -291,6 +320,7 @@ and the text to convert.
 unlit :: WhitespaceMode -> Style -> Text -> Either Error Text
 unlit ws ss = fmap unlines . unlit' ws ss Nothing . zip [1..] . lines
 ```
+
 However, the helper function `unlit'` is best thought of as a finite
 state automaton, where the states are used to remember the what kind
 of code block (if any) the automaton currently is in.
@@ -298,6 +328,7 @@ of code block (if any) the automaton currently is in.
 ``` haskell
 type State = Maybe Delimiter
 ```
+
 With this, the signature of `unlit'` becomes:
 
 ``` haskell
@@ -332,6 +363,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     lineIfKeepAll     = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
     lineIfKeepIndent  = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
 ```
+
 What do we want `relit` to do?
 ==============================
 
@@ -347,6 +379,7 @@ delimiters and emit the same file using an other style of delimiters.
 relit :: Style -> Delimiter -> Text -> Either Error Text
 relit ss ts = fmap unlines . relit' ss ts Nothing . zip [1..] . lines
 ```
+
 Again, we will interpret the helper function `relit'` as an
 automaton, which remembers the current state. However, we now also
 need a function which can emit code blocks in a certain style. For
@@ -361,6 +394,7 @@ emitBird :: Text -> Text
 emitBird l | stripStart l == "" = ">"
            | otherwise          = "> " <> l
 ```
+
 ``` haskell
 emitOpen :: Delimiter -> Maybe Text -> [Text]
 emitOpen  Bird              l = fmap emitBird (maybeToList l)
@@ -369,26 +403,29 @@ emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
 emitOpen  del               l = emitDelimiter del : maybeToList l
 ```
+
 ``` haskell
 emitCode :: Delimiter -> Text -> Text
 emitCode Bird l = emitBird l
 emitCode _    l = l
 ```
+
 ``` haskell
-emitClose :: Delimiter -> Text
-emitClose  Bird                = ""
-emitClose (LaTeX Begin)        = emitClose (LaTeX End)
-emitClose (Jekyll Begin lang)  = emitClose (Jekyll End lang)
-emitClose (OrgMode Begin lang) = emitClose (OrgMode End lang)
-emitClose  del                 = emitDelimiter (setLang' Nothing del)
+emitClose :: Delimiter -> Maybe Text -> [Text]
+emitClose  Bird                l = maybeToList l
+emitClose (LaTeX Begin)        l = emitClose (LaTeX End) l
+emitClose (Jekyll Begin lang)  l = emitClose (Jekyll End lang) l
+emitClose (OrgMode Begin lang) l = emitClose (OrgMode End lang) l
+emitClose  del                 l = emitDelimiter (setLang' Nothing del) : maybeToList l
 ```
+
 Using these simple functions we can easily define the `relit'`
 function.
 
 ``` haskell
 relit' :: Style -> Delimiter -> State -> [(Int, Text)] -> Either Error [Text]
 relit' _ _   Nothing    [] = Right []
-relit' _ ts (Just Bird) [] = Right [emitClose ts]
+relit' _ ts (Just Bird) [] = Right (emitClose ts Nothing)
 relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 relit' ss ts q ((n, l):ls) = case (q, q') of
 
@@ -399,13 +436,13 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     | isBegin c          -> blockOpen Nothing
     | otherwise          -> Left $ SpuriousDelimiter n c
 
-  (Just Bird, Nothing)   -> blockClose
+  (Just Bird, Nothing)   -> blockClose $ Just l
   (Just _o  , Nothing)   -> blockContinue l
 
   (Just Bird, Just Bird) -> blockContinue $ stripBird l
   (Just _o  , Just Bird) -> continue
   (Just o   , Just c)
-    | o `match` c        -> blockClose
+    | o `match` c        -> blockClose Nothing
     | otherwise          -> Left $ SpuriousDelimiter n c
 
   where
@@ -414,10 +451,9 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     continue         = (l :)                <$> continueWith q
     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
     blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
-    blockClose
-      | null ls && ts == Bird = Right []
-      | otherwise             = (emitClose ts :)  <$> continueWith Nothing
+    blockClose l'    = (emitClose ts l' <>)  <$> continueWith Nothing
 ```
+
 Error handling
 ==============
 
@@ -429,6 +465,7 @@ data Error
   | UnexpectedEnd     Delimiter
   deriving (Eq, Show)
 ```
+
 We can get a text representation of the error using `showError`.
 
 ``` haskell
