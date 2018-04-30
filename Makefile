@@ -2,6 +2,21 @@ all: src/Unlit/String.hs README.md
 
 test: test/ghcunlit
 	runhaskell test/TestUnlit.hs
+	make roundtrip
+
+roundtrip:
+	@for i in jekyll orgmode latex backtickfence tildefence; do \
+		echo "$$i"; \
+		unlit -t $$i -l haskell -i src/Unlit/Text.lhs -o test/roundtrip.1; \
+		unlit -f $$i -t bird -i test/roundtrip.1 -o test/roundtrip.2; \
+		diff test/roundtrip.2 src/Unlit/Text.lhs || exit 1; \
+		for j in jekyll orgmode latex backtickfence tildefence; do \
+			echo "  <-> $$j"; \
+			unlit -f $$i -t $$j -i test/roundtrip.1 -o test/roundtrip.2; \
+			unlit -f $$j -t $$i -i test/roundtrip.2 -o test/roundtrip.3; \
+			diff test/roundtrip.1 test/roundtrip.3 || exit 1; \
+		done \
+	done
 
 test/ghcunlit: test/ghcunlit.c
 	gcc -O2 -o test/ghcunlit test/ghcunlit.c
@@ -38,4 +53,4 @@ src/Unlit/String.hs: Makefile src/Unlit/Text.lhs
 	| sed '22i toLower    = map Char.toLower'                                         \
 	> src/Unlit/String.hs
 
-.PHONY: test dist build install
+.PHONY: test roundtrip dist build install

@@ -224,10 +224,11 @@ relit :: Style -> Delimiter -> String -> Either Error String
 relit ss ts = fmap unlines . relit' ss ts Nothing . zip [1..] . lines
 
 emitBird :: String -> String
-emitBird l = "> " <> l
+emitBird l | stripStart l == "" = ">"
+           | otherwise          = "> " <> l
 
 emitOpen :: Delimiter -> Maybe String -> [String]
-emitOpen  Bird              l = "" : fmap emitBird (maybeToList l)
+emitOpen  Bird              l = fmap emitBird (maybeToList l)
 emitOpen (LaTeX End)        l = emitOpen (LaTeX Begin) l
 emitOpen (Jekyll End lang)  l = emitOpen (Jekyll Begin lang) l
 emitOpen (OrgMode End lang) l = emitOpen (OrgMode Begin lang) l
@@ -272,7 +273,9 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     continue         = (l :)                <$> continueWith q
     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
     blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
-    blockClose       = (emitClose ts    :)  <$> continueWith Nothing
+    blockClose
+      | null ls && ts == Bird = Right []
+      | otherwise             = (emitClose ts :)  <$> continueWith Nothing
 
 data Error
   = SpuriousDelimiter Int Delimiter
