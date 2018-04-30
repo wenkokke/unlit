@@ -220,8 +220,8 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     lineIfKeepAll     = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
     lineIfKeepIndent  = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
 
-relit :: Style -> Style -> String -> Either Error String
-relit ss ts = fmap unlines . relit' ss (head ts) Nothing . zip [1..] . lines
+relit :: Style -> Delimiter -> String -> Either Error String
+relit ss ts = fmap unlines . relit' ss ts Nothing . zip [1..] . lines
 
 emitBird :: String -> String
 emitBird l = "> " <> l
