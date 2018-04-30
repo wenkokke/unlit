@@ -24,11 +24,12 @@ these are LaTeX-style code tags, Bird tags and Markdown fenced code
 blocks.
 
 > data Delimiter
->   = LaTeX         BeginEnd
->   | OrgMode       BeginEnd Lang
+>   = LaTeX    BeginEnd
+>   | OrgMode  BeginEnd Lang
 >   | Bird
->   | Jekyll        BeginEnd Lang
->   | Markdown      Fence Lang
+>   | Jekyll   BeginEnd Lang
+>   | Markdown Fence Lang
+>   | Asciidoc BeginEnd Lang
 >   deriving (Eq, Show)
 
 Some of these code blocks need to carry around additional information.
@@ -40,17 +41,19 @@ For instance, LaTex code blocks use distinct opening and closing tags.
 >   deriving (Eq, Show)
 
 > isBegin :: Delimiter -> Bool
-> isBegin (LaTeX   Begin  ) = True
-> isBegin (OrgMode Begin _) = True
-> isBegin (Jekyll  Begin _) = True
-> isBegin (Markdown _ _)    = True
-> isBegin  _                = False
+> isBegin (LaTeX    Begin  ) = True
+> isBegin (OrgMode  Begin _) = True
+> isBegin (Jekyll   Begin _) = True
+> isBegin (Asciidoc Begin _) = True
+> isBegin (Markdown _ _)     = True
+> isBegin  _                 = False
 
 > setBegin :: BeginEnd -> Delimiter -> Delimiter
-> setBegin beginEnd (LaTeX   _  )    = LaTeX   beginEnd
-> setBegin beginEnd (OrgMode _ lang) = OrgMode beginEnd lang
-> setBegin beginEnd (Jekyll  _ lang) = Jekyll  beginEnd lang
-> setBegin _         del             = del
+> setBegin beginEnd (LaTeX    _  )    = LaTeX    beginEnd
+> setBegin beginEnd (OrgMode  _ lang) = OrgMode  beginEnd lang
+> setBegin beginEnd (Jekyll   _ lang) = Jekyll   beginEnd lang
+> setBegin beginEnd (Asciidoc _ lang) = Asciidoc beginEnd lang
+> setBegin _         del              = del
 
 On the other hand, Markdown-style fences occur in two different variants.
 
@@ -79,6 +82,8 @@ following function.
 > emitDelimiter  Bird                 = ">"
 > emitDelimiter (Jekyll Begin l)      = "{% highlight" <+> fromMaybe "" l <+> "%}"
 > emitDelimiter (Jekyll End   _)      = "{% endhighlight %}"
+> emitDelimiter (Asciidoc Begin l)    = "[source" <> maybe "" (", "<>) l <> "]\n----"
+> emitDelimiter (Asciidoc End   _)    = "----"
 > emitDelimiter (Markdown Tilde l)    = "~~~" <+> fromMaybe "" l
 > emitDelimiter (Markdown Backtick l) = "```" <+> fromMaybe "" l
 
@@ -138,7 +143,7 @@ Then we have Jekyll Liquid code blocks.
 >   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
 >   | otherwise                           = Nothing
 
-Lastly, Markdown fenced codeblocks have as a peculiarity that they
+Markdown fenced codeblocks have as a peculiarity that they
 can be defined to only match on fences for a certain language.
 
 Below we only check if the given language occurs *anywhere* in the
@@ -150,6 +155,21 @@ well-formed Markdown.
 >   | fenceStr `isPrefixOf` stripStart l =
 >     Just $ Markdown fence $ bool Nothing lang (l `containsLang` lang)
 >   | otherwise = Nothing
+
+The Asciidoc fence in the beginning takes two lines, `[source,lang]` and `----`.
+Here we just check for the source line. The second line will be consumed by asciidocBlock.
+
+> isAsciidoc :: Lang -> Recogniser
+> isAsciidoc lang l
+>   | "[source" `isPrefixOf` l
+>     && l `containsLang` lang
+>     && "]" `isSuffixOf` stripEnd l = Just $ Asciidoc Begin lang
+>   | "----" `isPrefixOf` l          = Just $ Asciidoc End   lang
+>   | otherwise                      = Nothing
+
+> asciidocFence :: [(Int,Text)] -> Maybe [(Int,Text)]
+> asciidocFence ls | ((_,"----"):ls') <- ls = Just ls'
+>                  | otherwise              = Nothing
 
 In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
@@ -163,16 +183,18 @@ line, whether it conforms to *any* of a set of given styles.
 >     go (Markdown Tilde lang)    = isMarkdown Tilde "~~~" lang l
 >     go (Markdown Backtick lang) = isMarkdown Backtick "```" lang l
 >     go (OrgMode _ lang)         = isOrgMode lang l
+>     go (Asciidoc _ lang)        = isAsciidoc lang l
 
 And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
 
 > match :: Delimiter -> Delimiter -> Bool
-> match (LaTeX Begin)     (LaTeX End)             = True
-> match (Jekyll Begin _)  (Jekyll End _)          = True
-> match (OrgMode Begin _) (OrgMode End _)         = True
-> match (Markdown f _)    (Markdown g Nothing)    = f == g
-> match  _                 _                      = False
+> match (LaTeX Begin)      (LaTeX End)          = True
+> match (Jekyll Begin _)   (Jekyll End _)       = True
+> match (OrgMode Begin _)  (OrgMode End _)      = True
+> match (Asciidoc Begin _) (Asciidoc End _)     = True
+> match (Markdown f _)     (Markdown g Nothing) = f == g
+> match  _                  _                   = False
 
 Note that Bird-tags are notably absent from the `match` function, as
 they are a special case.
@@ -189,9 +211,10 @@ The options for source styles are as follows:
 
 > type Style = [Delimiter]
 
-> all, backtickfence, bird, haskell, infer, jekyll, latex, markdown, orgmode, tildefence :: Style
-> all           = latex <> markdown <> orgmode <> jekyll
+> all, backtickfence, tildefence, bird, haskell, infer, jekyll, latex, markdown, orgmode, asciidoc :: Style
+> all           = latex <> markdown <> orgmode <> jekyll <> asciidoc
 > backtickfence = [Markdown Backtick Nothing]
+> tildefence    = [Markdown Tilde Nothing]
 > bird          = [Bird]
 > haskell       = latex <> bird
 > infer         = []
@@ -199,7 +222,7 @@ The options for source styles are as follows:
 > latex         = [LaTeX Begin, LaTeX End]
 > markdown      = bird <> tildefence <> backtickfence
 > orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
-> tildefence    = [Markdown Tilde Nothing]
+> asciidoc      = [Asciidoc Begin Nothing, Asciidoc End Nothing]
 
 > parseStyle :: Text -> Maybe Style
 > parseStyle s = case toLower s of
@@ -212,6 +235,7 @@ The options for source styles are as follows:
 >   "latex"         -> Just latex
 >   "markdown"      -> Just markdown
 >   "orgmode"       -> Just orgmode
+>   "asciidoc"      -> Just asciidoc
 >   "tildefence"    -> Just tildefence
 >   _               -> Nothing
 
@@ -232,11 +256,12 @@ encounters. It will try to be permissive in this, and therefore, if
 it encounters a Bird-tag, will infer general Markdown-style.
 
 > inferred :: Maybe Delimiter -> Style
-> inferred  Nothing             = []
-> inferred (Just (LaTeX _))     = latex
-> inferred (Just (Jekyll _ _))  = jekyll
-> inferred (Just (OrgMode _ _)) = orgmode
-> inferred (Just _)             = markdown
+> inferred  Nothing              = []
+> inferred (Just (LaTeX _))      = latex
+> inferred (Just (Jekyll _ _))   = jekyll
+> inferred (Just (OrgMode _ _))  = orgmode
+> inferred (Just (Asciidoc _ _)) = asciidoc
+> inferred (Just _)              = markdown
 
 Lastly, we would like `unlit` to be able to operate in several
 different whitespace modes. For now, these are:
@@ -280,30 +305,34 @@ With this, the signature of `unlit'` becomes:
 > unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 > unlit' ws ss q ((n, l):ls) = case (q, q') of
 >
->   (Nothing  , Nothing)   -> continue $ lineIfKeepAll
+>   (Nothing  , Nothing)   -> continue  $ lineIfKeepAll
 >
->   (Just Bird, Nothing)   -> close    $ lineIfKeepAll
->   (Just _o  , Nothing)   -> continue $ [l]
+>   (Just Bird, Nothing)   -> close     $ lineIfKeepAll
+>   (Just _o  , Nothing)   -> continue  $ [l]
 >
->   (Nothing  , Just Bird) -> open     $ lineIfKeepIndent <> [stripBird' ws l]
+>   (Nothing  , Just Bird) -> open      $ lineIfKeepIndent <> [stripBird' ws l]
+>   (Nothing  , Just (Asciidoc Begin _))
+>     | Just ls' <- asciidocFence ls
+>                          -> open' ls' $ lineIfKeepAll <> lineIfKeepIndent
 >   (Nothing  , Just c)
->      | isBegin c         -> open     $ lineIfKeepAll <> lineIfKeepIndent
->      | otherwise         -> Left     $ SpuriousDelimiter n c
+>     | isBegin c          -> open      $ lineIfKeepAll <> lineIfKeepIndent
+>     | otherwise          -> Left      $ SpuriousDelimiter n c
 >
->   (Just Bird, Just Bird) -> continue $ [stripBird' ws l]
->   (Just _o  , Just Bird) -> continue $ [l]
+>   (Just Bird, Just Bird) -> continue  $ [stripBird' ws l]
+>   (Just _o  , Just Bird) -> continue  $ [l]
 >   (Just o   , Just c)
->      | o `match` c       -> close    $ lineIfKeepAll
->      | otherwise         -> Left     $ SpuriousDelimiter n c
+>     | o `match` c        -> close     $ lineIfKeepAll
+>     | otherwise          -> Left      $ SpuriousDelimiter n c
 >
 >   where
->     q'                = isDelimiter (ss `or` all) l
->     continueWith r l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls
->     open              = continueWith q'
->     continue          = continueWith q
->     close             = continueWith Nothing
->     lineIfKeepAll     = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
->     lineIfKeepIndent  = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
+>     q'                    = isDelimiter (ss `or` all) l
+>     continueWith r ls' l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls'
+>     open' ls'             = continueWith q' ls'
+>     open                  = open' ls
+>     continue              = continueWith q ls
+>     close                 = continueWith Nothing ls
+>     lineIfKeepAll         = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
+>     lineIfKeepIndent      = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
 
 What do we want `relit` to do?
 ==============================
@@ -356,6 +385,9 @@ function.
 >   (Nothing  , Nothing)   -> continue
 >
 >   (Nothing  , Just Bird) -> blockOpen $ Just (stripBird l)
+>   (Nothing  , Just (Asciidoc Begin _))
+>     | Just ls' <- asciidocFence ls
+>                          -> blockOpen' ls' Nothing
 >   (Nothing  , Just c)
 >     | isBegin c          -> blockOpen Nothing
 >     | otherwise          -> Left $ SpuriousDelimiter n c
@@ -370,12 +402,13 @@ function.
 >     | otherwise          -> Left $ SpuriousDelimiter n c
 >
 >   where
->     q'               = isDelimiter (ss `or` all) l
->     continueWith  r  = relit' (ss `or` inferred q') ts r ls
->     continue         = (l :)                <$> continueWith q
->     blockOpen     l' = (emitOpen  ts l' <>) <$> continueWith q'
->     blockContinue l' = (emitCode  ts l' :)  <$> continueWith q
->     blockClose l'    = (emitClose ts l' <>)  <$> continueWith Nothing
+>     q'                 = isDelimiter (ss `or` all) l
+>     continueWith r ls' = relit' (ss `or` inferred q') ts r ls'
+>     continue           = (l :)                <$> continueWith q ls
+>     blockOpen' ls' l'  = (emitOpen  ts l' <>) <$> continueWith q' ls'
+>     blockOpen      l'  = blockOpen' ls l'
+>     blockContinue  l'  = (emitCode  ts l' :)  <$> continueWith q ls
+>     blockClose     l'  = (emitClose ts l' <>) <$> continueWith Nothing ls
 
 Error handling
 ==============
