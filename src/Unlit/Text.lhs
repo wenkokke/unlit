@@ -43,6 +43,7 @@ For instance, LaTex code blocks use distinct opening and closing tags.
 > isBegin (LaTeX   Begin  ) = True
 > isBegin (OrgMode Begin _) = True
 > isBegin (Jekyll  Begin _) = True
+> isBegin (Markdown _ _)    = True
 > isBegin  _                = False
 
 On the other hand, Markdown-style fences occur in two different variants.
