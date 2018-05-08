@@ -106,4 +106,4 @@ main = do
           _ -> (optInputFile opts, optOutputFile opts)
 
   istream >>= either (error . unpack . showError) ostream .
-    if null ts then unlit (optWsMode opts) ss else relit ss ts
+    if null ts then unlit (optWsMode opts) ss else relit ss (head ts)
