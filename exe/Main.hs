@@ -36,7 +36,7 @@ defaultOptions = Options
   }
 
 parseStyle' :: String -> Style
-parseStyle' arg = fromMaybe (error $ "non-existent style" ++ arg) $ parseStyle $ T.pack arg
+parseStyle' arg = fromMaybe (error $ "non-existent style '" ++ arg ++ "'") $ parseStyle $ T.pack arg
 
 parseWhitespaceMode' :: String -> WhitespaceMode
 parseWhitespaceMode' arg = fromMaybe (error $ "non-existent whitespace mode" ++ arg) $ parseWhitespaceMode $ T.pack arg
@@ -46,11 +46,11 @@ options =
   [ Option "f" ["from"]
     (ReqArg (\arg opt -> return opt { optSourceStyle = optSourceStyle opt ++ parseStyle' arg })
             "STYLE_NAME")
-    "Source style (all, bird, jekyll, haskell, latex, markdown, tildefence, backtickfence)"
+    "Source style (all, bird, jekyll, haskell, latex, markdown, tildefence, backtickfence, infer)"
   , Option "t" ["to"]
     (ReqArg (\arg opt -> return opt { optTargetStyle = parseStyle' arg })
             "STYLE_NAME")
-    "Target style (bird, latex, tildefence, backtickfence, code)"
+    "Target style (bird, latex, tildefence, backtickfence, infer)"
 
   , Option "i" ["input"]
     (ReqArg (\arg opt -> return opt { optInputFile = T.readFile arg })
