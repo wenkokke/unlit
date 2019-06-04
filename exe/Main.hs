@@ -101,7 +101,7 @@ main = do
       ts = setLang (optLanguage opts) (optTargetStyle opts)
       (istream, ostream) =
         case nonOptions of
-          (i:o:_) | optGhc opts -> (T.readFile i, T.writeFile o)
+          (_:i:o:_) | optGhc opts -> (T.readFile i, T.writeFile o)
                   | otherwise -> error "Two arguments required: Input and output file"
           _ -> (optInputFile opts, optOutputFile opts)
 
